@@ -23,18 +23,19 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             ext: ""
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            ext: ""
+            features: "--features static"
           - os: macos-latest
             target: x86_64-apple-darwin
             ext: ""
+            features: ""
           - os: macos-latest
             target: aarch64-apple-darwin
             ext: ""
+            features: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             ext: ".exe"
+            features: ""
 
     steps:
       - name: Checkout Code
@@ -48,7 +49,7 @@ jobs:
         run: rustup target add ${{ matrix.target }}
 
       - name: Build Application
-        run: cargo build --release --target=${{ matrix.target }}
+        run: cargo build --release --target=${{ matrix.target }} ${{ matrix.features }}
 
       - name: Rename Executable
         run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-${{ matrix.target }}${{ matrix.ext }}
@@ -59,20 +60,20 @@ jobs:
           name: rftps-${{ matrix.target }}${{ matrix.ext }}
           path: rftps-${{ matrix.target }}${{ matrix.ext }}
 
-  # release:
-  #   name: Create GitHub Release
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   if: startsWith(github.ref, 'refs/tags/')
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
 
-  #   steps:
-  #     - name: Download Artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         path: artifacts
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-  #     - name: Create Release
-  #       uses: softprops/action-gh-release@v2
-  #       with:
-  #         files: artifacts/**
-  #         token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          token: ${{ secrets.GITHUB_TOKEN }}

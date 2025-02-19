@@ -15,8 +15,8 @@ use config::Args;
 
 #[tokio::main]
 pub async fn main() {
-    println!("Bootstrapping");
     let mut args = Args::parse(); // make args mutable to update password value in case it's None
+    println!("Bootstrapping");
 
     // Get the parsed local ip address
     let local_ip = utils::resolve_local_ip();
