@@ -10,3 +10,6 @@ libunftp = "0.20.3"
 unftp-sbe-fs = "0.2.6"
 rand = "0.9.0"
 async-trait = "0.1.50"
+
+[features]
+static = []
