@@ -15,7 +15,7 @@ use config::Args;
 #[tokio::main]
 pub async fn main() {
     println!("Bootstrapping");
-    let args = Args::parse();
+    let mut args = Args::parse(); // make args mutable to update password value in case it's missing
 
     // Get the parsed local ip address
     let local_ip = utils::resolve_local_ip();
@@ -28,8 +28,8 @@ pub async fn main() {
 
     // TODO: Enforce alphanumerical username on clap or validate here
     let username = args.username;
-    // TODO: Use user password if provided or generate random one
-    let password = utils::generate_random_string(6);
+    // we use get_or_insert_with to modify the value of args.password
+    let password = args.password.get_or_insert_with(|| utils::generate_random_string(6));
     let authenticator = Arc::new(auth::StaticAuthenticator {
         username: username.clone(),
         password: password.clone(),
