@@ -3,8 +3,9 @@ use clap::Parser;
 use std::sync::Arc;
 use unftp_sbe_fs::ServerExt;
 
-mod config;
-mod utils;
+pub mod config;
+pub use config::{validate_directory,validate_username};
+pub mod utils;
 mod auth;
 //mod logger;
 
@@ -20,9 +21,7 @@ pub async fn main() {
     // Get the parsed local ip address
     let local_ip = utils::resolve_local_ip();
     
-    // TODO: Make sure the user didn't provide characters that can't be used in a directory
-    // Ideally we also check that the directory does not use any reserved name like CON or AUX
-    // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+    // Directory validation happens in clap, check config.rs
     // Check user provided or default directory exists, if not create it
     let user_dir = utils::verify_home(args.directory);
 

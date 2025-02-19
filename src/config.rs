@@ -24,7 +24,8 @@ pub struct Args {
     pub password: Option<String>,
 }
 
-fn validate_username(username: &str) -> Result<String, String> {
+pub fn validate_username(username: &str) -> Result<String, String> {
+    // For each? character check if is alphanumeric
     if username.chars().all(|c| c.is_alphanumeric()) {
         Ok(username.to_string()) // Return valid username
     } else {
@@ -32,9 +33,10 @@ fn validate_username(username: &str) -> Result<String, String> {
     }
 }
 
-fn validate_directory(directory: &str) -> Result<String, String> {
+pub fn validate_directory(directory: &str) -> Result<String, String> {
     // Statics cannot have dynamic memory allocations and need to be known at compile time,
     // define the arrays and respective sizes, we ignore "/" since the user can specify ./dir which is valid in Windows
+    // Validation based on https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
     static INVALID_CHARS: [&str; 8] = ["<", ">", ":", "\"", "\\", "|", "?", "*"];
     static INVALID_NAMES: [&str; 30] = ["CON", "PRN", "AUX", "NUL", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5",
                                     "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT0", "LPT1", "LPT2",
