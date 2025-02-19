@@ -1,5 +1,3 @@
-use core::fmt;
-
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -41,8 +39,9 @@ fn validate_directory(directory: &str) -> Result<String, String> {
     static INVALID_NAMES: [&str; 30] = ["CON", "PRN", "AUX", "NUL", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5",
                                     "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT0", "LPT1", "LPT2",
                                     "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³"];
-    if directory.chars().all(|c| INVALID_CHARS.contains(&c.to_string().as_str())) {
-        return Err(String::from(format!("Path {} contains invalid characters", directory)));
+    
+    if directory.chars().any(|c| INVALID_CHARS.contains(&c.to_string().as_str())) {
+        return Err(format!("Path {} contains invalid characters", directory));
     }
 
     // Convert directory to uppercase to handle case insensitivity
