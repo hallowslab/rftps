@@ -1,9 +1,11 @@
 use std::net::SocketAddr;
 use clap::Parser;
+use std::sync::Arc;
 use unftp_sbe_fs::ServerExt;
 
 mod config;
 mod utils;
+mod auth;
 //mod logger;
 
 use config::Args;
@@ -27,12 +29,17 @@ pub async fn main() {
     // TODO: Enforce alphanumerical username on clap or validate here
     let username = args.username;
     // TODO: Use user password if provided or generate random one
-    let password = utils::generate_random_string(12);
+    let password = utils::generate_random_string(6);
+    let authenticator = Arc::new(auth::StaticAuthenticator {
+        username: username.clone(),
+        password: password.clone(),
+    });
 
     println!("Server Init");
     let server = match libunftp::Server::with_fs(user_dir)
         .greeting("RFTPS server")
         .passive_ports(50000..65535)
+        .authenticator(authenticator)
         //.notify_presence(ConnectionLogger)
         .build() {
             Ok(s) => s,
