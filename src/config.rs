@@ -1,3 +1,5 @@
+use core::fmt;
+
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -12,7 +14,7 @@ pub struct Args {
     pub port: u16,
 
     /// Directory where uploaded files will be stored
-    #[arg(short, long, default_value = "./rftps")]
+    #[arg(short, long, value_parser = validate_directory, default_value = "./rftps")]
     pub directory: String,
 
     /// Username for FTP server
@@ -30,4 +32,26 @@ fn validate_username(username: &str) -> Result<String, String> {
     } else {
         Err(String::from("Username must contain only letters and numbers."))
     }
+}
+
+fn validate_directory(directory: &str) -> Result<String, String> {
+    // Statics cannot have dynamic memory allocations and need to be known at compile time,
+    // define the arrays and respective sizes, we ignore "/" since the user can specify ./dir which is valid in Windows
+    static INVALID_CHARS: [&str; 8] = ["<", ">", ":", "\"", "\\", "|", "?", "*"];
+    static INVALID_NAMES: [&str; 30] = ["CON", "PRN", "AUX", "NUL", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5",
+                                    "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT0", "LPT1", "LPT2",
+                                    "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³"];
+    if directory.chars().all(|c| INVALID_CHARS.contains(&c.to_string().as_str())) {
+        return Err(String::from(format!("Path {} contains invalid characters", directory)));
+    }
+
+    // Convert directory to uppercase to handle case insensitivity
+    let directory_upper = directory.to_uppercase();
+
+    // Check if the directory name contains any reserved names as substrings
+    if INVALID_NAMES.iter().any(|&reserved| directory_upper.contains(reserved)) {
+        return Err(format!("Path {} contains a reserved name", directory));
+    }
+
+    Ok(directory.to_string())
 }

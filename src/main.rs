@@ -15,7 +15,7 @@ use config::Args;
 #[tokio::main]
 pub async fn main() {
     println!("Bootstrapping");
-    let mut args = Args::parse(); // make args mutable to update password value in case it's missing
+    let mut args = Args::parse(); // make args mutable to update password value in case it's None
 
     // Get the parsed local ip address
     let local_ip = utils::resolve_local_ip();
@@ -26,7 +26,7 @@ pub async fn main() {
     // Check user provided or default directory exists, if not create it
     let user_dir = utils::verify_home(args.directory);
 
-    // TODO: Enforce alphanumerical username on clap or validate here
+    // Username validation happens in clap, check config.rs
     let username = args.username;
     // we use get_or_insert_with to modify the value of args.password
     let password = args.password.get_or_insert_with(|| utils::generate_random_string(6));
