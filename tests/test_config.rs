@@ -22,44 +22,46 @@ fn test_invalid_username_with_space() {
     assert_eq!(validate_username(username), Err("Username must contain only letters and numbers.".to_string()));
 }
 
-// Test for valid directory
 #[test]
 fn test_valid_directory() {
-    let directory = "my_folder";
-    assert_eq!(validate_directory(directory), Ok(directory.to_string()));
+    assert_eq!(validate_directory("valid_directory"), Ok("valid_directory".to_string()));
+    assert_eq!(validate_directory("my-folder_123"), Ok("my-folder_123".to_string()));
+    assert_eq!(validate_directory("./valid/dir"), Ok("./valid/dir".to_string()));
+    assert_eq!(validate_directory("C:/Users/ValidDir"), Ok("C:/Users/ValidDir".to_string()));
 }
 
-// Test for directory with invalid characters
 #[test]
-fn test_directory_with_invalid_characters() {
-    let directory = "invalid|folder";
-    assert_eq!(validate_directory(directory), Err(format!("Path {} contains invalid characters", directory)));
+fn test_invalid_characters() {
+    assert!(validate_directory("invalid|dir").is_err());
+    assert!(validate_directory("invalid?dir").is_err());
+    assert!(validate_directory("invalid*dir").is_err());
+    assert!(validate_directory("<invalid>").is_err());
+    assert!(validate_directory("\"quotes\"").is_err());
 }
 
-// Test for directory with a reserved name (case-insensitive)
 #[test]
-fn test_directory_with_reserved_name() {
-    let directory = "com1_folder";
-    assert_eq!(validate_directory(directory), Err(format!("Path {} contains a reserved name", directory)));
+fn test_reserved_names() {
+    assert!(validate_directory("CON").is_err());
+    assert!(validate_directory("com1").is_err()); // Case insensitive
+    assert!(validate_directory("lpt3").is_err());
+    // TODO: Fix validation
+    // Should fail because it contains a reserved name, however this is incorrect I belive it should only fail with extensions like AUX.txt since it matches AUX
+    // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+    assert!(validate_directory("AUX_folder").is_err());
+    assert!(validate_directory("backup_LPT2").is_err()); // Should fail because it contains LPT2
 }
 
-// Test for directory with a valid name but uppercased reserved name
 #[test]
-fn test_directory_with_uppercase_reserved_name() {
-    let directory = "COM1_folder";
-    assert_eq!(validate_directory(directory), Err(format!("Path {} contains a reserved name", directory)));
+fn test_case_insensitive_reserved_names() {
+    assert!(validate_directory("con").is_err()); // Lowercase should still be invalid
+    assert!(validate_directory("CoM5").is_err()); // Mixed case should still be invalid
+    assert!(validate_directory("lPt7").is_err());
 }
 
-// Test for directory with an invalid name (exact match with a reserved name)
 #[test]
-fn test_directory_with_exact_reserved_name() {
-    let directory = "CON";
-    assert_eq!(validate_directory(directory), Err(format!("Path {} contains a reserved name", directory)));
-}
-
-// Test for directory with an invalid name (substring match)
-#[test]
-fn test_directory_with_reserved_name_as_substring() {
-    let directory = "some_COM1_text";
-    assert_eq!(validate_directory(directory), Err(format!("Path {} contains a reserved name", directory)));
+fn test_valid_special_cases() {
+    assert_eq!(validate_directory("normal-folder"), Ok("normal-folder".to_string()));
+    assert_eq!(validate_directory("123456789"), Ok("123456789".to_string()));
+    assert_eq!(validate_directory("folder.name"), Ok("folder.name".to_string()));
+    assert_eq!(validate_directory("dir_with_underscore"), Ok("dir_with_underscore".to_string()));
 }
