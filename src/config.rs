@@ -8,7 +8,7 @@ pub struct Args {
     pub address: String,
 
     /// Port to run the FTP server on
-    #[arg(short, long, default_value = "2121")]
+    #[arg(short, long, default_value = "21212")]
     pub port: u16,
 
     /// Directory where uploaded files will be stored
@@ -36,7 +36,8 @@ pub fn validate_username(username: &str) -> Result<String, String> {
 pub fn validate_directory(directory: &str) -> Result<String, String> {
     // Statics cannot have dynamic memory allocations and need to be known at compile time,
     // define the arrays and respective sizes, we ignore "/" since the user can specify ./dir which is valid in Windows
-    // we also ignore / and : in case the user specifies a full path with Disk drive
+    // we also ignore / and : in case the user specifies a full path with Disk drive,
+    // TODO: maybe we should also ignore \ in case the user specifies a path with spaces or other special characters
     // Validation based on https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
     static INVALID_CHARS: [&str; 6] = ["<", ">", "\"", "|", "?", "*"];
     static INVALID_NAMES: [&str; 30] = ["CON", "PRN", "AUX", "NUL", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5",
