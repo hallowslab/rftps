@@ -1,5 +1,12 @@
 use clap::Parser;
 
+// Generated during build time
+#[cfg(feature = "include_pem_files")]
+pub const CERT_PEM: &str = include_str!("cert.pem");
+
+#[cfg(feature = "include_pem_files")]
+pub const KEY_PEM: &str = include_str!("key.pem");
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -8,7 +15,7 @@ pub struct Args {
     pub address: String,
 
     /// Port to run the FTP server on
-    #[arg(short, long, default_value = "21212")]
+    #[arg(short = 'p', long, default_value = "21212")]
     pub port: u16,
 
     /// Directory where uploaded files will be stored
@@ -20,7 +27,7 @@ pub struct Args {
     pub username: String,
 
     /// Password for the FTP user
-    #[arg(long)]
+    #[arg(short = 'P', long)]
     pub password: Option<String>,
 }
 
