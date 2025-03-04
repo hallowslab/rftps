@@ -19,11 +19,23 @@ pub async fn main() {
     println!("Bootstrapping");
 
     // Get the parsed local ip address
-    let local_ip = utils::resolve_local_ip();
+    let local_ip = match utils::resolve_local_ip() {
+        Ok(local_ip) => local_ip,
+        Err(err) => {
+            eprint!("Error: {}", err);
+            std::process::exit(1);
+        }
+    };
     
     // Directory validation happens in clap, check config.rs
-    // Check user provided or default directory exists, if not create it
-    let user_dir = utils::verify_home(args.directory);
+    // Checks user provided or default directory exists, if not creates it
+    let user_dir = match utils::verify_home(args.directory) {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            std::process::exit(1);
+        }
+    };
 
     // Username validation happens in clap, check config.rs
     let username = args.username;
@@ -52,8 +64,8 @@ pub async fn main() {
     let addr: SocketAddr = match format!("{}:{}", args.address, args.port).parse() {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Failed to parse port ({}), defaulting to 0.0.0.0:2121", e);
-            "0.0.0.0:2121".parse().unwrap() // default
+            eprintln!("Failed to parse port ({}), defaulting to 0.0.0.0:21212", e);
+            "0.0.0.0:21212".parse().unwrap() // default
         }
     };
     println!("\t=> Listening on {}", addr);
