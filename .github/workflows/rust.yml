@@ -97,11 +97,11 @@ jobs:
           openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=RFTPS"
         
       - name: Move certificates(Unix)
-        if: ${{ !contains(matrix.os, 'windows') }}
+        if: ${{ matrix.os != 'windows' }}
         run: mv cert.pem key.pem src/
 
       - name: Move certificates(Windows)
-        if: ${{ !contains(matrix.os, 'windows') }}
+        if: ${{ contains(matrix.os, 'windows') }}
         shell: pwsh
         run: Move-Item cert.pem, key.pem -Destination src/
 
