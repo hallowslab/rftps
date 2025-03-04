@@ -16,14 +16,6 @@ use config::Args;
 
 #[tokio::main]
 pub async fn main() {
-    #[cfg(feature = "include_pem_files")]
-    pub use config::{CERT_PEM,KEY_PEM};
-    #[cfg(feature = "include_pem_files")]
-    {
-        println!("CERT_PEM: {}", CERT_PEM);
-        println!("KEY_PEM: {}", KEY_PEM);
-    }
-
     let mut args = Args::parse(); // make args mutable to update password value in case it's None
 
     // Get the parsed local ip address
@@ -56,12 +48,14 @@ pub async fn main() {
     });
 
     println!("Server Init");
-    let server = match libunftp::Server::with_fs(user_dir)
+    let mut server_builder = libunftp::Server::with_fs(user_dir)
         .greeting("RFTPS server")
         .passive_ports(50000..65535)
-        .authenticator(authenticator)
+        .authenticator(authenticator);
         //.notify_presence(ConnectionLogger)
-        .build() {
+        // Enable TLS if feature is enabled
+
+    let server = match server_builder.build() {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Error building FTP server: {}", e);

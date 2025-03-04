@@ -1,12 +1,5 @@
 use clap::Parser;
 
-// Generated during build time
-#[cfg(feature = "include_pem_files")]
-pub const CERT_PEM: &str = include_str!("cert.pem");
-
-#[cfg(feature = "include_pem_files")]
-pub const KEY_PEM: &str = include_str!("key.pem");
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
