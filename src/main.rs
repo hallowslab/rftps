@@ -13,10 +13,16 @@ use config::Args;
 //use logger::ConnectionLogger;
 
 
+
 #[tokio::main]
 pub async fn main() {
+    #[cfg(feature = "include_pem_files")]
+    {
+        println!("CERT_PEM: {}", CERT_PEM);
+        println!("KEY_PEM: {}", KEY_PEM);
+    }
+
     let mut args = Args::parse(); // make args mutable to update password value in case it's None
-    println!("Bootstrapping");
 
     // Get the parsed local ip address
     let local_ip = match utils::resolve_local_ip() {

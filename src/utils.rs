@@ -16,7 +16,7 @@ fn get_local_ip () -> io::Result<SocketAddr> /*convenience function that bubbles
     return Ok(local_addr) // socket should be closed here https://doc.rust-lang.org/std/net/struct.UdpSocket.html
 }
 
-pub fn resolve_local_ip() -> io::Result<SocketAddr> {
+pub fn resolve_local_ip() -> Result<SocketAddr, String> {
     println!("Resolving local address");
     
     // Try to get the local IP address
