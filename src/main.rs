@@ -17,6 +17,8 @@ use config::Args;
 #[tokio::main]
 pub async fn main() {
     #[cfg(feature = "include_pem_files")]
+    pub use config::{CERT_PEM,KEY_PEM};
+    #[cfg(feature = "include_pem_files")]
     {
         println!("CERT_PEM: {}", CERT_PEM);
         println!("KEY_PEM: {}", KEY_PEM);
