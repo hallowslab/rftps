@@ -22,12 +22,13 @@ pub async fn main() {
     let local_ip = match utils::resolve_local_ip() {
         Ok(local_ip) => local_ip,
         Err(err) => {
-            eprint!("Error: {}", err);
+            eprintln!("Error: {}", err);
             std::process::exit(1);
         }
     };
     
-    // Directory validation happens in clap, check config.rs
+    // Directory name validation happens in clap, check config.rs
+    // Other validations like path exists, is directory and resolve full path happens in utils::verify_home
     // Checks user provided or default directory exists, if not creates it
     let user_dir = match utils::verify_home(args.directory) {
         Ok(path) => path,
@@ -39,7 +40,7 @@ pub async fn main() {
 
     // Username validation happens in clap, check config.rs
     let username = args.username;
-    // we use get_or_insert_with to modify the value of args.password
+    // we use get_or_insert_with to get if exists or modify the value of args.password
     let password = args.password.get_or_insert_with(|| utils::generate_random_string(6));
     let authenticator = Arc::new(auth::StaticAuthenticator {
         username: username.clone(),
