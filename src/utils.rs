@@ -22,7 +22,6 @@ pub fn resolve_local_ip() -> Result<SocketAddr, String> {
     // Try to get the local IP address
     match get_local_ip() {
         Ok(local_ip) => {
-            dbg!(local_ip);
             Ok(local_ip)
         }
         Err(e) => {
