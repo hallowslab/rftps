@@ -16,18 +16,19 @@ fn get_local_ip () -> io::Result<SocketAddr> /*convenience function that bubbles
     return Ok(local_addr) // socket should be closed here https://doc.rust-lang.org/std/net/struct.UdpSocket.html
 }
 
-pub fn resolve_local_ip() -> Result<SocketAddr, String> {
+pub fn resolve_local_ip() -> io::Result<SocketAddr> {
     println!("Resolving local address");
-    let local_ip = match get_local_ip() {
+    
+    // Try to get the local IP address
+    match get_local_ip() {
         Ok(local_ip) => {
-            println!("\t=>: {}", local_ip.ip());
+            dbg!(local_ip);
             Ok(local_ip)
         }
         Err(e) => {
-            return Err(format!("Failed to get local IP address: {}, Terminating...", e));
+            Err(format!("Failed to resolve local IP: {}", e))
         }
-    };
-    local_ip
+    }
 }
 
 pub fn verify_home(directory: String) -> Result<PathBuf, String> {
@@ -47,9 +48,11 @@ pub fn verify_home(directory: String) -> Result<PathBuf, String> {
     }
 
     match user_path.canonicalize() {
-        Ok(abs_path) => Ok(abs_path),
+        Ok(abs_path) => {
+            Ok(abs_path)
+        }
         Err(e) => {
-                return Err(format!("Failed to resolve absolute path for {}: {}", user_path.display(), e));
+            return Err(format!("Failed to resolve absolute path for {}: {}", user_path.display(), e));
         }
     }
 
