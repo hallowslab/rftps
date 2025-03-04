@@ -15,6 +15,8 @@ jobs:
   setup:
     name: Set Matrix Targets
     runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.set_targets.outputs.targets }}  # Make outputs available for subsequent jobs
     steps:
       - name: Set Matrix Targets
         id: set_targets
