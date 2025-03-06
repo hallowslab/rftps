@@ -22,6 +22,18 @@ pub struct Args {
     /// Password for the FTP user
     #[arg(short = 'P', long)]
     pub password: Option<String>,
+
+    /// Enable/disable ftps
+    #[arg(short='f',long, value_parser=clap::builder::BoolishValueParser::new(), default_value="true")]
+    pub enable_ftps: Option<bool>,
+
+    /// Certificate PEM file
+    #[arg(long)]
+    pub cert_pem: Option<String>,
+
+    /// Key PEM file
+    #[arg(long)]
+    pub key_pem: Option<String>
 }
 
 pub fn validate_username(username: &str) -> Result<String, String> {
