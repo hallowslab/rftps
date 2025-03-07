@@ -65,3 +65,20 @@ pub fn generate_random_string(length: usize) -> String {
         .map(char::from)             // Convert bytes to chars
         .collect()                    // Collect into a String
 }
+
+pub fn validate_certificates(cert: &String, key: &String) -> bool {
+    let cert_path = Path::new(&cert);
+    let key_path = Path::new(&key);
+
+    match (cert_path.is_file(),key_path.is_file()) {
+        (false, _) => {
+            eprintln!("Certificate is not a valid file: {:?}", cert_path);
+        }
+        (_, false) => {
+            eprintln!("Key is not a valid file: {:?}", key_path);
+        }
+        _ => (),
+    };
+
+    return true
+}

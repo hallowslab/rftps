@@ -6,6 +6,7 @@ use unftp_sbe_fs::ServerExt;
 pub mod config;
 pub use config::{validate_directory,validate_username};
 pub mod utils;
+pub use utils::validate_certificates;
 mod auth;
 //mod logger;
 
@@ -51,9 +52,32 @@ pub async fn main() {
     let mut server_builder = libunftp::Server::with_fs(user_dir)
         .greeting("RFTPS server")
         .passive_ports(50000..65535)
+        //.ftps("certs_file", "key_file")
         .authenticator(authenticator);
         //.notify_presence(ConnectionLogger)
         // Enable TLS if feature is enabled
+        #[cfg(feature = "include_pem_files")]
+        {
+            println!("TLS functionality enabled, loading TLS certificate files");
+            let mut ftps_configured = false;
+            if let Some(true) = args.enable_ftps {
+                // Don't join the two Some in a single if let it's unstable atm:
+                // https://github.com/rust-lang/rust/issues/53667
+                if let Some(ref cert_pem) = args.cert_pem {
+                    if let Some(ref key_pem) = args.key_pem {
+                        if validate_certificates(&cert_pem, &key_pem) {
+                            server_builder = server_builder.ftps(&cert_pem, &key_pem);
+                            println!("Loaded user certificate");
+                            ftps_configured = true;
+                        }
+                    }
+                }
+                if !ftps_configured {
+                    server_builder = server_builder.ftps("cert.pem", "key.pem");
+                    println!("Loaded default certificate");
+                }
+            }
+        }
 
     let server = match server_builder.build() {
             Ok(s) => s,
