@@ -1,11 +1,61 @@
-use async_trait::async_trait;
-use libunftp::notification::PresenceListener;
+use std::{fmt::Debug, future::Future, pin::Pin};
+use libunftp::notification::{DataEvent, DataListener, EventMeta, PresenceEvent, PresenceListener};
 
 pub struct ConnectionLogger;
 
-#[async_trait]
-impl PresenceListener for ConnectionLogger {
-    async fn receive_presence_event<'life0,'async_trait>(&'life0 self,e:libunftp::notification::PresenceEvent,m:libunftp::notification::EventMeta) ->  ::core::pin::Pin<Box<dyn ::core::future::Future<Output = ()> + ::core::marker::Send+'async_trait> >where 'life0:'async_trait,Self:'async_trait {
-        
+impl Debug for ConnectionLogger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ConnectionLogger->")
     }
 }
+
+impl PresenceListener for ConnectionLogger {
+    fn receive_presence_event<'life0, 'async_trait>(
+        &'life0 self,
+        e: PresenceEvent,
+        m: EventMeta
+    ) ->  Pin<Box<dyn Future<Output = ()> + Send + 'async_trait>>
+    where 
+        Self: 'async_trait,
+        'life0: 'async_trait
+    {
+        Box::pin(async move {
+            match e {
+                PresenceEvent::LoggedIn => println!("User {} logged in", m.username),
+                PresenceEvent::LoggedOut => println!("User {} logged out", m.username),
+            }
+        })
+    }
+}
+
+pub struct DataLogger;
+
+impl Debug for DataLogger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DataLogger->")
+    }
+}
+
+impl DataListener for DataLogger {
+    fn receive_data_event<'life0, 'async_trait>(
+        &'life0 self,
+        e: DataEvent,
+        m:EventMeta
+    ) ->  Pin<Box<dyn Future<Output = ()> + Send + 'async_trait>>
+    where
+        Self:'async_trait,
+        'life0:'async_trait
+    {
+        Box::pin(async move {
+            match e {
+                DataEvent::MadeDir { path } => println!("User {} created directory {}", m.username, path),
+                DataEvent::RemovedDir { path } => println!("User {} deleted directory {}", m.username, path),
+                DataEvent::Got { path, bytes } => println!("User {} downloaded file {}", m.username, path),
+                DataEvent::Put { path, bytes } => println!("User {} uploaded file {}", m.username, path),
+                DataEvent::Renamed { from, to } => println!("User {} renamed {} to {}", m.username, from, to),
+                DataEvent::Deleted { path } => println!("User {} deleted {}", m.username, path),
+            }
+        })    
+    }
+}
+    

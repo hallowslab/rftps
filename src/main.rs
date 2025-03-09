@@ -5,13 +5,15 @@ use unftp_sbe_fs::ServerExt;
 
 pub mod config;
 pub use config::{validate_directory,validate_username};
+use config::Args;
+
 pub mod utils;
 pub use utils::validate_certificates;
-mod auth;
-//mod logger;
 
-use config::Args;
-//use logger::ConnectionLogger;
+mod auth;
+
+mod logger;
+use logger::{ConnectionLogger,DataLogger};
 
 
 
@@ -48,13 +50,12 @@ pub async fn main() {
         password: password.clone(),
     });
 
-    println!("Server Init");
     let mut server_builder = libunftp::Server::with_fs(user_dir)
         .greeting("RFTPS server")
         .passive_ports(50000..65535)
-        //.ftps("certs_file", "key_file")
-        .authenticator(authenticator);
-        //.notify_presence(ConnectionLogger)
+        .authenticator(authenticator)
+        .notify_data(DataLogger)
+        .notify_presence(ConnectionLogger);
         // Enable TLS if feature is enabled
         #[cfg(feature = "include_pem_files")]
         {
@@ -65,8 +66,8 @@ pub async fn main() {
                 // https://github.com/rust-lang/rust/issues/53667
                 if let Some(ref cert_pem) = args.cert_pem {
                     if let Some(ref key_pem) = args.key_pem {
-                        if validate_certificates(&cert_pem, &key_pem) {
-                            server_builder = server_builder.ftps(&cert_pem, &key_pem);
+                        if validate_certificates(cert_pem, key_pem) {
+                            server_builder = server_builder.ftps(cert_pem, key_pem);
                             println!("Loaded user certificate");
                             ftps_configured = true;
                         }
@@ -78,7 +79,8 @@ pub async fn main() {
                 }
             }
         }
-
+        
+    println!("Server Init");
     let server = match server_builder.build() {
             Ok(s) => s,
             Err(e) => {
@@ -97,7 +99,7 @@ pub async fn main() {
     };
     println!("\t=> Listening on {}", addr);
 
-    println!("Config:\n\tHost: {}\n\tPort: {}\n\tUsername: {}\n\tPassword: {}", local_ip.ip().to_string(), args.port, username, password);
+    println!("Config:\n\tHost: {}\n\tPort: {}\n\tUsername: {}\n\tPassword: {}\n", local_ip.ip().to_string(), args.port, username, password);
     // Start the server and handle errors.
     if let Err(e) = server.listen(&addr.to_string()).await {
         eprintln!("Error listening on port: {}", e);
