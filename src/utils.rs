@@ -67,18 +67,21 @@ pub fn generate_random_string(length: usize) -> String {
 }
 
 pub fn validate_certificates(cert: &String, key: &String) -> bool {
+    let mut valid_certs = true;
     let cert_path = Path::new(&cert);
     let key_path = Path::new(&key);
 
     match (cert_path.is_file(),key_path.is_file()) {
         (false, _) => {
             eprintln!("Certificate is not a valid file: {:?}", cert_path);
+            valid_certs = false;
         }
         (_, false) => {
             eprintln!("Key is not a valid file: {:?}", key_path);
+            valid_certs = false;
         }
         _ => (),
     };
 
-    return true
+    return valid_certs
 }
