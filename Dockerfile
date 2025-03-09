@@ -1,9 +1,11 @@
 # Stage 1: Setup the builder environment using Debian-based Rust image
 FROM rust:slim-bookworm AS builder
 
-ARG UPX_VERSION
+ARG UPX_VERSION \
+    WITH_WINE
 
-ENV UPX_VERSION=${UPX_VERSION:-5.0.0}
+ENV UPX_VERSION=${UPX_VERSION:-5.0.0} \
+    WITH_WINE=${WITH_WINE:-no}
 
 # Install dependencies required for cross-compiling to Windows GNU target
 RUN apt-get update && \
@@ -59,9 +61,10 @@ RUN ./upx/upx --best rftps
 FROM debian:bookworm-slim
 
 # Optional: Install Wine to run Windows binaries in Docker (not necessary for production)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends wine && \
-    rm -rf /var/lib/apt/lists/*
+RUN if [ "$WITH_WINE" == "yes" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends wine \
+    && rm -rf /var/lib/apt/lists/* \
+    fi
 
 WORKDIR /rftps
 
