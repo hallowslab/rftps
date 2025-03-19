@@ -53,8 +53,6 @@ jobs:
           echo "Running tests for ${{ matrix.target }} on ${{ matrix.os }}"
           cargo test
 
-    
-
   build:
     name: Build for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -66,18 +64,22 @@ jobs:
           - os: ubuntu-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[0] }}
             ext: ""
+            a_ext: ".tar.gz"
             features: "--features include_pem_files"
           - os: macos-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[1] }}
             ext: ""
+            a_ext: ".tar.gz"
             features: "--features include_pem_files"
           - os: macos-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[2] }}
             ext: ""
+            a_ext: ".tar.gz"
             features: "--features include_pem_files"
           - os: windows-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[3] }}
             ext: ".exe"
+            a_ext: ".zip"
             features: "--features include_pem_files"
 
     steps:
@@ -87,6 +89,16 @@ jobs:
       - name: Install Dependencies (Linux)
         if: contains(matrix.os, 'ubuntu')
         run: sudo apt update && sudo apt install -y musl-tools gcc-aarch64-linux-gnu
+
+      - name: Install UPX
+        if: ${{ contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos') }}
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            sudo apt install -y upx
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            brew install upx
+          fi
+        shell: bash
 
       - name: Install Rust Target
         run: rustup target add ${{ matrix.target }}
@@ -98,24 +110,43 @@ jobs:
         
       - name: Move certificates(Unix)
         if: ${{ matrix.os != 'windows-latest' }}
-        run: mv cert.pem key.pem src/
+        run: cp cert.pem key.pem src/
 
       - name: Move certificates(Windows)
         if: ${{ contains(matrix.os, 'windows') }}
         shell: pwsh
-        run: Move-Item cert.pem, key.pem -Destination src/
+        run: Copy-Item cert.pem, key.pem -Destination src/
 
       - name: Build Application
         run: cargo build --release --target=${{ matrix.target }} ${{ matrix.features }}
 
       - name: Rename Executable
         run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-${{ matrix.target }}${{ matrix.ext }}
+      
+      # Don't pack the windows executables AV will flag them
+      - name: Compress Executable with UPX
+        if: ${{ contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos') }}
+        run: |
+          upx --best --lzma rftps-${{ matrix.target }}${{ matrix.ext }}
 
-      - name: Upload Artifact
+      - name: Archive Files (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        shell: pwsh
+        run: |
+          Compress-Archive -Path rftps-${{ matrix.target }}${{ matrix.ext }}, cert.pem, key.pem -DestinationPath rftps-${{ matrix.target }}${{ matrix.a_ext }}
+
+      - name: Archive Files (Linux/macOS)
+        if: ${{ !contains(matrix.os, 'windows') }}
+        run: |
+          tar -czvf rftps-${{ matrix.target }}${{ matrix.a_ext }} rftps-${{ matrix.target }}${{ matrix.ext }} cert.pem key.pem
+
+      - name: Upload Archived Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rftps-${{ matrix.target }}${{ matrix.ext }}
-          path: rftps-${{ matrix.target }}${{ matrix.ext }}
+          name: rftps-${{ matrix.target }}${{ matrix.a_ext }}
+          path: |
+            rftps-${{ matrix.target }}.zip
+            rftps-${{ matrix.target }}.tar.gz
 
   release:
     name: Create GitHub Release
