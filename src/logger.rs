@@ -50,8 +50,10 @@ impl DataListener for DataLogger {
             match e {
                 DataEvent::MadeDir { path } => println!("User {} created directory {}", m.username, path),
                 DataEvent::RemovedDir { path } => println!("User {} deleted directory {}", m.username, path),
-                DataEvent::Got { path, bytes } => println!("User {} downloaded file {}", m.username, path),
-                DataEvent::Put { path, bytes } => println!("User {} uploaded file {}", m.username, path),
+                // {path: , bytes: }
+                DataEvent::Got { path, _ } => println!("User {} downloaded file {}", m.username, path),
+                // {path: , bytes: }
+                DataEvent::Put { path, _ } => println!("User {} uploaded file {}", m.username, path),
                 DataEvent::Renamed { from, to } => println!("User {} renamed {} to {}", m.username, from, to),
                 DataEvent::Deleted { path } => println!("User {} deleted {}", m.username, path),
             }
