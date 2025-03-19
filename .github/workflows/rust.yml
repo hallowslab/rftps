@@ -91,14 +91,8 @@ jobs:
         run: sudo apt update && sudo apt install -y musl-tools gcc-aarch64-linux-gnu
 
       - name: Install UPX
-        if: ${{ contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos') }}
-        run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            sudo apt install -y upx
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install upx
-          fi
-        shell: bash
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: sudo apt install -y upx
 
       - name: Install Rust Target
         run: rustup target add ${{ matrix.target }}
@@ -124,8 +118,9 @@ jobs:
         run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-${{ matrix.target }}${{ matrix.ext }}
       
       # Don't pack the windows executables AV will flag them
+      # Don't pack for macos, bad support
       - name: Compress Executable with UPX
-        if: ${{ contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos') }}
+        if: ${{ contains(matrix.os, 'ubuntu') }}
         run: |
           upx --best --lzma rftps-${{ matrix.target }}${{ matrix.ext }}
 
