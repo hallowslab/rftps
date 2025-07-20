@@ -52,7 +52,7 @@ pub async fn main() {
 
     let mut server_builder = libunftp::Server::with_fs(user_dir)
         .greeting("RFTPS server")
-        .passive_ports(50000..65535)
+        .passive_ports(50000..=65535)
         .authenticator(authenticator)
         .notify_data(DataLogger)
         .notify_presence(ConnectionLogger);
