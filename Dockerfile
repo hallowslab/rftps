@@ -33,7 +33,7 @@ RUN rustup target add x86_64-unknown-linux-gnu
 # Generate TLS certificates
 RUN openssl req -x509 -newkey rsa:2048 -nodes \
     -keyout key.pem -out cert.pem -days 3650 \
-    -subj '/CN=RFTPS/O=RFTPS/C=NL'
+    -subj '/CN=RFTPS/O=RFTPS/C=PT'
 
 COPY . .
 
