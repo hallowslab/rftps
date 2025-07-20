@@ -50,7 +50,7 @@ pub async fn main() {
         password: password.clone(),
     });
 
-    let server_builder = libunftp::Server::with_fs(user_dir)
+    let mut server_builder = libunftp::Server::with_fs(user_dir)
         .greeting("RFTPS server")
         .passive_ports(50000..=65535)
         .authenticator(authenticator)
