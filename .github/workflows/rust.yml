@@ -46,7 +46,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
       - name: Run tests
         run: |
           echo "Running tests for ${{ matrix.target }} on ${{ matrix.os }}"
@@ -83,7 +83,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Dependencies (Linux)
         if: contains(matrix.os, 'ubuntu')
@@ -149,7 +149,7 @@ jobs:
 
     steps:
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
 

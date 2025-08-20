@@ -1,6 +1,6 @@
 [package]
 name = "rftps"
-version = "0.3.6"
+version = "0.3.7"
 edition="2021"
 
 [dependencies]
@@ -16,3 +16,11 @@ include_pem_files = []
 
 [dev-dependencies]
 tempfile = "3.17.1"
+
+# Build optimization for smaller binaries
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Link-time optimization
+codegen-units = 1   # Better optimization
+panic = "abort"     # Smaller binary
+strip = true        # Remove debug symbols
