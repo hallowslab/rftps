@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libunftp::auth::{Authenticator, DefaultUser, Credentials, AuthenticationError};
+use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 
 #[derive(Debug)]
 pub struct StaticAuthenticator {
@@ -8,19 +8,27 @@ pub struct StaticAuthenticator {
 }
 
 #[async_trait]
-impl Authenticator<DefaultUser> for StaticAuthenticator {
+impl Authenticator for StaticAuthenticator {
     async fn authenticate(
         &self,
         username: &str,
-        credentials: &Credentials
-    ) -> Result<DefaultUser, AuthenticationError> {
-        if let Some(password) = &credentials.password {  // Borrow credentials.password here because move occurs because `password` has type `std::string::String`, which does not implement the `Copy` trait
-            if username == self.username && *password == self.password { // dereference password here because the trait `PartialEq<std::string::String>` is not implemented for `&std::string::String`
-                println!("Received valid login from {} for {}", credentials.source_ip, username);
-                return Ok(DefaultUser);
+        credentials: &Credentials,
+    ) -> Result<Principal, AuthenticationError> {
+        if let Some(password) = &credentials.password {
+            if username == self.username && *password == self.password {
+                println!(
+                    "Received valid login from {} for {}",
+                    credentials.source_ip, username
+                );
+                return Ok(Principal {
+                    username: username.to_string(),
+                });
             }
         }
-        println!("Received invalid login from {} for {}", credentials.source_ip, username);
+        println!(
+            "Received invalid login from {} for {}",
+            credentials.source_ip, username
+        );
         Err(AuthenticationError::BadPassword)
     }
 }
