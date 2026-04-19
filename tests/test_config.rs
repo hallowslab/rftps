@@ -1,6 +1,5 @@
 // tests/test_config.rs
-use rftps::config::{validate_username, validate_directory};
-
+use rftps::config::{validate_directory, validate_username};
 
 #[test]
 fn test_valid_username() {
@@ -12,22 +11,40 @@ fn test_valid_username() {
 #[test]
 fn test_invalid_username_special_characters() {
     let username = "invalid@username";
-    assert_eq!(validate_username(username), Err("Username must contain only letters and numbers.".to_string()));
+    assert_eq!(
+        validate_username(username),
+        Err("Username must contain only letters and numbers.".to_string())
+    );
 }
 
 // Test for invalid username (contains spaces)
 #[test]
 fn test_invalid_username_with_space() {
     let username = "invalid username";
-    assert_eq!(validate_username(username), Err("Username must contain only letters and numbers.".to_string()));
+    assert_eq!(
+        validate_username(username),
+        Err("Username must contain only letters and numbers.".to_string())
+    );
 }
 
 #[test]
 fn test_valid_directory() {
-    assert_eq!(validate_directory("valid_directory"), Ok("valid_directory".to_string()));
-    assert_eq!(validate_directory("my-folder_123"), Ok("my-folder_123".to_string()));
-    assert_eq!(validate_directory("./valid/dir"), Ok("./valid/dir".to_string()));
-    assert_eq!(validate_directory("C:/Users/ValidDir"), Ok("C:/Users/ValidDir".to_string()));
+    assert_eq!(
+        validate_directory("valid_directory"),
+        Ok("valid_directory".to_string())
+    );
+    assert_eq!(
+        validate_directory("my-folder_123"),
+        Ok("my-folder_123".to_string())
+    );
+    assert_eq!(
+        validate_directory("./valid/dir"),
+        Ok("./valid/dir".to_string())
+    );
+    assert_eq!(
+        validate_directory("C:/Users/ValidDir"),
+        Ok("C:/Users/ValidDir".to_string())
+    );
 }
 
 #[test]
@@ -60,8 +77,17 @@ fn test_case_insensitive_reserved_names() {
 
 #[test]
 fn test_valid_special_cases() {
-    assert_eq!(validate_directory("normal-folder"), Ok("normal-folder".to_string()));
+    assert_eq!(
+        validate_directory("normal-folder"),
+        Ok("normal-folder".to_string())
+    );
     assert_eq!(validate_directory("123456789"), Ok("123456789".to_string()));
-    assert_eq!(validate_directory("folder.name"), Ok("folder.name".to_string()));
-    assert_eq!(validate_directory("dir_with_underscore"), Ok("dir_with_underscore".to_string()));
+    assert_eq!(
+        validate_directory("folder.name"),
+        Ok("folder.name".to_string())
+    );
+    assert_eq!(
+        validate_directory("dir_with_underscore"),
+        Ok("dir_with_underscore".to_string())
+    );
 }
