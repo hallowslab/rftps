@@ -6,7 +6,7 @@ pub mod auth;
 pub mod logger;
 
 use libunftp::ServerBuilder;
-use libunftp::auth::DefaultUserDetailProvider;
+use unftp_core::auth::DefaultUserDetailProvider;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::path::Path;

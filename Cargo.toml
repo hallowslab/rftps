@@ -9,6 +9,7 @@ clap = { version = "4.5.30", features = ["derive"] }
 tokio = { version = "1.43.0", features = ["full"] }
 libunftp = { version = "0.23", features = ["ring"] }
 unftp-sbe-fs = "0.4.0"
+unftp-core = "0.1"
 rand = "0.10.1"
 async-trait = "0.1.50"
 tempfile = "3.17.1"

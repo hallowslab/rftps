@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use libunftp::auth::{AuthenticationError, Authenticator, Credentials, Principal};
+use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 
 #[derive(Debug)]
 pub struct StaticAuthenticator {
