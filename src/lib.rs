@@ -5,20 +5,14 @@ pub use utils::{generate_random_string, resolve_local_ip, validate_certificates,
 pub mod auth;
 pub mod logger;
 
-use libunftp::ServerBuilder;
-use unftp_core::auth::DefaultUserDetailProvider;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::path::Path;
-use tokio::sync::oneshot;
-use unftp_sbe_fs::Filesystem;
-use std::io::Write;
+#[cfg(feature = "background-jobs")]
+pub mod event;
+#[cfg(feature = "background-jobs")]
+pub mod job;
 
-#[cfg(feature = "include_pem_files")]
-const EMBEDDED_CERT: &[u8] = include_bytes!("../cert.pem");
-#[cfg(feature = "include_pem_files")]
-const EMBEDDED_KEY: &[u8] = include_bytes!("../key.pem");
-
+#[cfg(feature = "background-jobs")]
+pub use event::FtpEvent;
+#[cfg(not(feature = "background-jobs"))]
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum FtpEvent {
     LoggedIn { username: String },
@@ -31,6 +25,24 @@ pub enum FtpEvent {
     Deleted { username: String, path: String },
 }
 
+use libunftp::ServerBuilder;
+use unftp_core::auth::DefaultUserDetailProvider;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::oneshot;
+use unftp_sbe_fs::Filesystem;
+
+#[cfg(feature = "include-pem-files")]
+use std::io::Write;
+
+#[cfg(not(feature = "include-pem-files"))]
+use std::path::Path;
+
+#[cfg(feature = "include-pem-files")]
+const EMBEDDED_CERT: &[u8] = include_bytes!("../cert.pem");
+#[cfg(feature = "include-pem-files")]
+const EMBEDDED_KEY: &[u8] = include_bytes!("../key.pem");
+
 pub struct FtpServer {
     addr: SocketAddr,
     user_dir: std::path::PathBuf,
@@ -39,9 +51,12 @@ pub struct FtpServer {
     enable_ftps: bool,
     cert_path: Option<String>,
     key_path: Option<String>,
-    #[cfg(feature = "include_pem_files")]
+    #[cfg(feature = "include-pem-files")]
     _temp_certs: Option<(tempfile::NamedTempFile, tempfile::NamedTempFile)>,
+    #[cfg(not(feature = "background-jobs"))]
     event_tx: Option<tokio::sync::mpsc::UnboundedSender<FtpEvent>>,
+    #[cfg(feature = "background-jobs")]
+    event_bus: Option<event::EventBus>,
 }
 
 impl FtpServer {
@@ -61,7 +76,7 @@ impl FtpServer {
         let mut cert_path = args.cert_pem;
         let mut key_path = args.key_pem;
 
-        #[cfg(feature = "include_pem_files")]
+        #[cfg(feature = "include-pem-files")]
         let mut _temp_certs = None;
 
         if enable_ftps {
@@ -73,7 +88,7 @@ impl FtpServer {
 
             if !provided_valid {
                 // Priority 2: Try embedded fallback if feature enabled
-                #[cfg(feature = "include_pem_files")]
+                #[cfg(feature = "include-pem-files")]
                 {
                     println!("Using embedded certificates fallback");
                     let mut t_cert = tempfile::NamedTempFile::new()
@@ -94,7 +109,7 @@ impl FtpServer {
                 }
 
                 // Priority 3: Try local files cert.pem/key.pem in CWD if still no paths
-                #[cfg(not(feature = "include_pem_files"))]
+                #[cfg(not(feature = "include-pem-files"))]
                 {
                     if cert_path.is_none() || key_path.is_none() {
                         if Path::new("cert.pem").exists() && Path::new("key.pem").exists() {
@@ -114,14 +129,24 @@ impl FtpServer {
             enable_ftps,
             cert_path,
             key_path,
-            #[cfg(feature = "include_pem_files")]
+            #[cfg(feature = "include-pem-files")]
             _temp_certs,
+            #[cfg(not(feature = "background-jobs"))]
             event_tx: None,
+            #[cfg(feature = "background-jobs")]
+            event_bus: None,
         })
     }
 
+    #[cfg(not(feature = "background-jobs"))]
     pub fn with_event_tx(mut self, tx: tokio::sync::mpsc::UnboundedSender<FtpEvent>) -> Self {
         self.event_tx = Some(tx);
+        self
+    }
+
+    #[cfg(feature = "background-jobs")]
+    pub fn with_event_bus(mut self, bus: event::EventBus) -> Self {
+        self.event_bus = Some(bus);
         self
     }
 
@@ -141,15 +166,28 @@ impl FtpServer {
 
         let root = self.user_dir.clone();
 
+        #[cfg(not(feature = "background-jobs"))]
+        let event_tx = self.event_tx.clone();
+        #[cfg(feature = "background-jobs")]
+        let event_bus = self.event_bus.clone();
+
         let server_builder = ServerBuilder::new(Box::new(move || {
             Filesystem::new(root.clone()).expect("Failed to create filesystem")
         }))
         .greeting("RFTPS server")
         .passive_ports(50000..=65535)
         .authenticator(Arc::new(authenticator))
-        .user_detail_provider(Arc::new(DefaultUserDetailProvider))
-        .notify_data(logger::DataLogger { event_tx: self.event_tx.clone() })
-        .notify_presence(logger::ConnectionLogger { event_tx: self.event_tx.clone() });
+        .user_detail_provider(Arc::new(DefaultUserDetailProvider));
+
+        #[cfg(not(feature = "background-jobs"))]
+        let server_builder = server_builder
+            .notify_data(logger::DataLogger { event_tx: event_tx.clone() })
+            .notify_presence(logger::ConnectionLogger { event_tx });
+
+        #[cfg(feature = "background-jobs")]
+        let server_builder = server_builder
+            .notify_data(logger::DataLogger { event_bus: event_bus.clone() })
+            .notify_presence(logger::ConnectionLogger { event_bus });
 
         let mut server_builder = server_builder;
         if self.enable_ftps {
