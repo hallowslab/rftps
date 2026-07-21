@@ -18,10 +18,10 @@ cargo build --release
 
 ### Build with Embedded PEM Files
 
-To embed default PEM certificates (useful for development or standalone deployments where certificates are bundled into the binary), use the `include_pem_files` feature.
+To embed default PEM certificates (useful for development or standalone deployments where certificates are bundled into the binary), use the `include-pem-files` feature.
 
 ```bash
-cargo build --release --features include_pem_files
+cargo build --release --features include-pem-files
 ```
 
 **Note:** When this feature is enabled, the server will attempt to load `cert.pem` and `key.pem` from the project root at compile time and embed them.

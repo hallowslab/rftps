@@ -42,7 +42,7 @@ rftps --address 192.168.1.100 --port 2121 --directory ./my-ftp-root --username a
 
 ```bash
 # Build with TLS support
-cargo build --release --features include_pem_files
+cargo build --release --features include-pem-files
 
 # Run with custom certificates
 rftps --enable-ftps true --cert-pem ./cert.pem --key-pem ./key.pem
@@ -107,7 +107,7 @@ The server will automatically create the specified root directory if it doesn't 
 cargo build --release
 
 # With TLS support
-cargo build --release --features include_pem_files
+cargo build --release --features include-pem-files
 
 # Development build with debug info
 cargo build
@@ -149,7 +149,7 @@ User rftps logged out
 - ✅ User Authentication
 
 ### Optional Features
-- `include_pem_files` - Enables TLS certificate loading
+- `include-pem-files` - Enables TLS certificate loading
 
 ## 🤝 Contributing
 

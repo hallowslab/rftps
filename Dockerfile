@@ -42,7 +42,7 @@ RUN cargo test --all
 
 # Compile Windows release with Ninja
 RUN export CMAKE_GENERATOR=Ninja; \
-    cargo build --target x86_64-pc-windows-gnu --release --features include_pem_files \
+    cargo build --target x86_64-pc-windows-gnu --release --features include-pem-files \
     && mv ./target/x86_64-pc-windows-gnu/release/rftps.exe ./ \
     && cargo clean
 
@@ -50,7 +50,7 @@ RUN export CMAKE_GENERATOR=Ninja; \
 RUN ./upx/upx --best rftps.exe
 
 # Compile Linux release
-RUN cargo build --target x86_64-unknown-linux-gnu --release --features include_pem_files \
+RUN cargo build --target x86_64-unknown-linux-gnu --release --features include-pem-files \
     && mv ./target/x86_64-unknown-linux-gnu/release/rftps ./ \
     && cargo clean
     

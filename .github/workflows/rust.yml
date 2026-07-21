@@ -63,22 +63,22 @@ jobs:
             target: ${{ fromJson(needs.setup.outputs.targets)[0] }}
             ext: ""
             a_ext: ".tar.gz"
-            features: "--features include_pem_files"
+            features: "--features include-pem-files"
           - os: macos-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[1] }}
             ext: ""
             a_ext: ".tar.gz"
-            features: "--features include_pem_files"
+            features: "--features include-pem-files"
           - os: macos-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[2] }}
             ext: ""
             a_ext: ".tar.gz"
-            features: "--features include_pem_files"
+            features: "--features include-pem-files"
           - os: windows-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[3] }}
             ext: ".exe"
             a_ext: ".zip"
-            features: "--features include_pem_files"
+            features: "--features include-pem-files"
 
     steps:
       - name: Checkout Code

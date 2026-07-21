@@ -18,7 +18,7 @@ serde_json = "1"
 thiserror = "2"
 
 [features]
-include_pem_files = []
+include-pem-files = []
 background-jobs = []
 
 [dev-dependencies]
