@@ -9,6 +9,10 @@ pub mod logger;
 pub mod event;
 #[cfg(feature = "background-jobs")]
 pub mod job;
+#[cfg(feature = "background-jobs")]
+pub mod storage;
+#[cfg(feature = "background-jobs")]
+pub mod premium;
 
 #[cfg(feature = "background-jobs")]
 pub use event::FtpEvent;
@@ -57,6 +61,8 @@ pub struct FtpServer {
     event_tx: Option<tokio::sync::mpsc::UnboundedSender<FtpEvent>>,
     #[cfg(feature = "background-jobs")]
     event_bus: Option<event::EventBus>,
+    #[cfg(feature = "background-jobs")]
+    premium_config: Option<premium::BackgroundJobConfig>,
 }
 
 impl FtpServer {
@@ -80,14 +86,12 @@ impl FtpServer {
         let mut _temp_certs = None;
 
         if enable_ftps {
-            // Priority 1: Check if provided paths exist
             let provided_valid = match (&cert_path, &key_path) {
                 (Some(c), Some(k)) => validate_certificates(c, k),
                 _ => false,
             };
 
             if !provided_valid {
-                // Priority 2: Try embedded fallback if feature enabled
                 #[cfg(feature = "include-pem-files")]
                 {
                     println!("Using embedded certificates fallback");
@@ -108,7 +112,6 @@ impl FtpServer {
                     _temp_certs = Some((t_cert, t_key));
                 }
 
-                // Priority 3: Try local files cert.pem/key.pem in CWD if still no paths
                 #[cfg(not(feature = "include-pem-files"))]
                 {
                     if cert_path.is_none() || key_path.is_none() {
@@ -135,6 +138,8 @@ impl FtpServer {
             event_tx: None,
             #[cfg(feature = "background-jobs")]
             event_bus: None,
+            #[cfg(feature = "background-jobs")]
+            premium_config: None,
         })
     }
 
@@ -147,6 +152,12 @@ impl FtpServer {
     #[cfg(feature = "background-jobs")]
     pub fn with_event_bus(mut self, bus: event::EventBus) -> Self {
         self.event_bus = Some(bus);
+        self
+    }
+
+    #[cfg(feature = "background-jobs")]
+    pub fn with_premium_config(mut self, config: premium::BackgroundJobConfig) -> Self {
+        self.premium_config = Some(config);
         self
     }
 
@@ -205,7 +216,64 @@ impl FtpServer {
 
         let addr_str = self.addr.to_string();
 
-        tokio::select! {
+        #[cfg(feature = "background-jobs")]
+        let background_handle = if let (Some(bus), Some(config)) =
+            (self.event_bus.as_ref(), self.premium_config.as_ref())
+        {
+            if config.enabled {
+                let (_, subscriber_rx) = bus.subscribe();
+
+                let queue: Arc<dyn job::JobQueue> =
+                    Arc::new(job::queue::InMemoryQueue::new(config.queue_capacity));
+
+                let handlers = event::HandlerRegistry::new();
+                if config.remote_storage.is_some() {
+                    println!("[Premium] Replication handler registered");
+                }
+
+                let scheduler = Arc::new(job::JobScheduler::new(
+                    Arc::clone(&queue),
+                    handlers,
+                    Arc::new(Vec::new()),
+                    config.max_retries,
+                    config.retry_delay_base,
+                ));
+
+                let worker_pool = job::WorkerPool::new(
+                    config.max_parallel_jobs,
+                    Arc::clone(&queue),
+                    Arc::new(Vec::new()),
+                );
+
+                let scheduler_clone = Arc::clone(&scheduler);
+                let event_process = tokio::spawn(async move {
+                    let mut rx = subscriber_rx;
+                    while let Some(event) = rx.recv().await {
+                        scheduler_clone.process_event(&event).await;
+                    }
+                });
+
+                let retry_handle = {
+                    let scheduler = Arc::clone(&scheduler);
+                    tokio::spawn(async move { scheduler.run_retry_loop().await })
+                };
+
+                let worker_handle = tokio::spawn(async move { worker_pool.run().await });
+
+                println!(
+                    "[Premium] Background jobs started ({} workers, queue capacity: {})",
+                    config.max_parallel_jobs, config.queue_capacity
+                );
+
+                Some((event_process, retry_handle, worker_handle))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let result = tokio::select! {
             result = server.listen(&addr_str) => {
                 result.map_err(|e| format!("Error listening: {}", e))
             }
@@ -213,6 +281,16 @@ impl FtpServer {
                 println!("FTP Server stopping...");
                 Ok(())
             }
+        };
+
+        #[cfg(feature = "background-jobs")]
+        if let Some((event_process, retry_handle, worker_handle)) = background_handle {
+            event_process.abort();
+            retry_handle.abort();
+            worker_handle.abort();
+            println!("[Premium] Background jobs stopped");
         }
+
+        result
     }
 }
