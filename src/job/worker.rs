@@ -39,9 +39,9 @@ impl Worker {
                             job.status = JobStatus::Running;
                             let _ = self.queue.update_status(job.id, JobStatus::Running).await;
 
+                            let job_type_name = format!("{:?}", job.job_type).to_lowercase();
                             let executor = self.executors.iter().find(|e| {
-                                std::mem::discriminant(&job.job_type) == std::mem::discriminant(&super::types::JobType::Replication)
-                                    || e.name() == format!("{:?}", job.job_type).to_lowercase()
+                                e.name() == job_type_name
                             });
 
                             let result = if let Some(executor) = executor {
