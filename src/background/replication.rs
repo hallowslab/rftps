@@ -10,12 +10,11 @@ use crate::storage::traits::StorageBackend;
 
 pub struct ReplicationHandler {
     home_dir: std::path::PathBuf,
-    _backend: Arc<dyn StorageBackend>,
 }
 
 impl ReplicationHandler {
-    pub fn new(home_dir: std::path::PathBuf, backend: Arc<dyn StorageBackend>) -> Self {
-        Self { home_dir, _backend: backend }
+    pub fn new(home_dir: std::path::PathBuf) -> Self {
+        Self { home_dir }
     }
 }
 
@@ -52,11 +51,12 @@ impl EventHandler for ReplicationHandler {
 
 pub struct ReplicationExecutor {
     backend: Arc<dyn StorageBackend>,
+    print_messages: bool,
 }
 
 impl ReplicationExecutor {
-    pub fn new(backend: Arc<dyn StorageBackend>) -> Self {
-        Self { backend }
+    pub fn new(backend: Arc<dyn StorageBackend>, print_messages: bool) -> Self {
+        Self { backend, print_messages }
     }
 }
 
@@ -99,7 +99,9 @@ impl JobExecutor for ReplicationExecutor {
                 }
             })?;
 
-        println!("[Replication] {} → {}", source, dest);
+        if self.print_messages {
+            println!("[Replication] {} → {}", source, dest);
+        }
         Ok(())
     }
 }
