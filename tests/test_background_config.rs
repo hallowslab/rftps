@@ -250,7 +250,7 @@ fn test_backend_config_type_tag_parse() {
 }
 
 #[test]
-fn test_s3_config_parse_and_factory_rejects() {
+fn test_s3_config_parse() {
     let json = r#"{
         "type": "s3",
         "endpoint": "https://minio.local",
@@ -272,10 +272,51 @@ fn test_s3_config_parse_and_factory_rejects() {
         }
         other => panic!("expected S3, got {:?}", other),
     }
+}
+
+#[cfg(feature = "s3")]
+#[test]
+fn test_s3_factory_builds_backend() {
+    let json = r#"{
+        "type": "s3",
+        "endpoint": "https://minio.local",
+        "region": null,
+        "bucket": "b",
+        "path_style": true,
+        "access_key_id": "k",
+        "secret_access_key": "s",
+        "session_token": null,
+        "path_prefix": "",
+        "ca_cert_pem": null
+    }"#;
+    let cfg: BackendConfig = serde_json::from_str(json).unwrap();
+    let backend = StorageBackendFactory::build(&cfg).unwrap();
+    assert_eq!(backend.name(), "s3");
+    let caps = backend.capabilities().unwrap();
+    assert!(caps.supports(Capability::Rename));
+    assert!(!caps.supports(Capability::Mkdir));
+}
+
+#[cfg(not(feature = "s3"))]
+#[test]
+fn test_s3_factory_rejects_without_feature() {
+    let json = r#"{
+        "type": "s3",
+        "endpoint": "https://minio.local",
+        "region": null,
+        "bucket": "b",
+        "path_style": true,
+        "access_key_id": "k",
+        "secret_access_key": "s",
+        "session_token": null,
+        "path_prefix": "",
+        "ca_cert_pem": null
+    }"#;
+    let cfg: BackendConfig = serde_json::from_str(json).unwrap();
     let err = StorageBackendFactory::build(&cfg)
         .map(|_| ())
         .unwrap_err();
-    assert!(err.to_string().contains("S3"));
+    assert!(err.to_string().contains("s3"));
 }
 
 #[test]
