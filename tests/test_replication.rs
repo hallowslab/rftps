@@ -1,4 +1,4 @@
-use rftps::premium::{ReplicationHandler, ReplicationExecutor};
+use rftps::background::{ReplicationHandler, ReplicationExecutor};
 use rftps::event::{EventHandler, FtpEvent};
 use rftps::job::{JobExecutor, JobType, JobError};
 use rftps::storage::StorageBackend;
@@ -51,7 +51,7 @@ impl StorageBackend for FailingStorageBackend {
 
 #[test]
 fn test_handler_interested_in_upload() {
-    let handler = ReplicationHandler::new("/home/test".into(), Arc::new(MockStorageBackend));
+    let handler = ReplicationHandler::new("/home/test".into());
     let event = FtpEvent::FileUploaded {
         username: "alice".into(),
         path: "/photos/pic.jpg".into(),
@@ -62,7 +62,7 @@ fn test_handler_interested_in_upload() {
 
 #[test]
 fn test_handler_not_interested_in_download() {
-    let handler = ReplicationHandler::new("/home/test".into(), Arc::new(MockStorageBackend));
+    let handler = ReplicationHandler::new("/home/test".into());
     let event = FtpEvent::FileDownloaded {
         username: "alice".into(),
         path: "/photos/pic.jpg".into(),
@@ -72,7 +72,7 @@ fn test_handler_not_interested_in_download() {
 
 #[tokio::test]
 async fn test_handler_creates_replication_job() {
-    let handler = ReplicationHandler::new("/home/test".into(), Arc::new(MockStorageBackend));
+    let handler = ReplicationHandler::new("/home/test".into());
     let event = FtpEvent::FileUploaded {
         username: "alice".into(),
         path: "/photos/pic.jpg".into(),
@@ -88,7 +88,7 @@ async fn test_handler_creates_replication_job() {
 
 #[tokio::test]
 async fn test_executor_uploads_file() {
-    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend));
+    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), true);
 
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("test.txt");
@@ -110,7 +110,7 @@ async fn test_executor_uploads_file() {
 
 #[tokio::test]
 async fn test_executor_fails_on_missing_source() {
-    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend));
+    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), true);
 
     let job = rftps::job::Job::new(
         JobType::Replication,
@@ -132,7 +132,7 @@ async fn test_executor_fails_on_missing_source() {
 
 #[tokio::test]
 async fn test_executor_storage_error_is_retryable() {
-    let executor = ReplicationExecutor::new(Arc::new(FailingStorageBackend));
+    let executor = ReplicationExecutor::new(Arc::new(FailingStorageBackend), true);
 
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("test.txt");
@@ -155,7 +155,7 @@ async fn test_executor_storage_error_is_retryable() {
 
 #[tokio::test]
 async fn test_executor_missing_payload_field() {
-    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend));
+    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), true);
 
     let job = rftps::job::Job::new(
         JobType::Replication,
