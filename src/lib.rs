@@ -12,7 +12,7 @@ pub mod job;
 #[cfg(feature = "background-jobs")]
 pub mod storage;
 #[cfg(feature = "background-jobs")]
-pub mod premium;
+pub mod background;
 
 #[cfg(feature = "background-jobs")]
 pub use event::FtpEvent;
@@ -62,7 +62,7 @@ pub struct FtpServer {
     #[cfg(feature = "background-jobs")]
     event_bus: Option<event::EventBus>,
     #[cfg(feature = "background-jobs")]
-    premium_config: Option<premium::BackgroundJobConfig>,
+    background_config: Option<background::BackgroundJobConfig>,
 }
 
 impl FtpServer {
@@ -139,7 +139,7 @@ impl FtpServer {
             #[cfg(feature = "background-jobs")]
             event_bus: None,
             #[cfg(feature = "background-jobs")]
-            premium_config: None,
+            background_config: None,
         })
     }
 
@@ -156,8 +156,8 @@ impl FtpServer {
     }
 
     #[cfg(feature = "background-jobs")]
-    pub fn with_premium_config(mut self, config: premium::BackgroundJobConfig) -> Self {
-        self.premium_config = Some(config);
+    pub fn with_background_config(mut self, config: background::BackgroundJobConfig) -> Self {
+        self.background_config = Some(config);
         self
     }
 
@@ -218,7 +218,7 @@ impl FtpServer {
 
         #[cfg(feature = "background-jobs")]
         let background_handle = if let (Some(bus), Some(config)) =
-            (self.event_bus.as_ref(), self.premium_config.as_ref())
+            (self.event_bus.as_ref(), self.background_config.as_ref())
         {
             if config.enabled {
                 let (_, subscriber_rx) = bus.subscribe();
@@ -226,15 +226,62 @@ impl FtpServer {
                 let queue: Arc<dyn job::JobQueue> =
                     Arc::new(job::queue::InMemoryQueue::new(config.queue_capacity));
 
-                let handlers = event::HandlerRegistry::new();
-                if config.remote_storage.is_some() {
-                    println!("[Premium] Replication handler registered");
+                let mut handlers = event::HandlerRegistry::new();
+                let mut executors: Vec<Box<dyn job::JobExecutor>> = Vec::new();
+
+                let home_dir = self.user_dir.clone();
+
+                #[cfg(feature = "relay")]
+                if let Some(relay_cfg) = config.relay.clone() {
+                    match background::relay::RelayStorageBackend::new(relay_cfg.clone(), Some(bus.clone())) {
+                        Ok(backend) => {
+                            handlers.register(Box::new(
+                                background::ReplicationHandler::new(home_dir.clone()),
+                            ));
+                            executors.push(Box::new(background::ReplicationExecutor::new(
+                                Arc::new(backend),
+                                relay_cfg.relay_messages,
+                            )));
+                            if relay_cfg.relay_messages {
+                                println!("[Background] Replication handler registered (relay)");
+                            }
+                        }
+                        Err(e) => println!("[Background] Relay disabled: {}", e),
+                    }
                 }
+
+                #[cfg(not(feature = "relay"))]
+                if let Some(remote) = config.remote_storage.clone() {
+                    handlers.register(Box::new(
+                        background::ReplicationHandler::new(home_dir.clone()),
+                    ));
+                    executors.push(Box::new(background::ReplicationExecutor::new(
+                        Arc::new(crate::storage::FtpsBackend::new(remote)),
+                        true,
+                    )));
+                    println!("[Background] Replication handler registered (static storage)");
+                }
+
+                #[cfg(feature = "relay")]
+                if config.relay.is_none() {
+                    if let Some(remote) = config.remote_storage.clone() {
+                        handlers.register(Box::new(
+                            background::ReplicationHandler::new(home_dir.clone()),
+                        ));
+                        executors.push(Box::new(background::ReplicationExecutor::new(
+                            Arc::new(crate::storage::FtpsBackend::new(remote)),
+                            true,
+                        )));
+                        println!("[Background] Replication handler registered (static storage)");
+                    }
+                }
+
+                let executors: Arc<Vec<Box<dyn job::JobExecutor>>> = Arc::new(executors);
 
                 let scheduler = Arc::new(job::JobScheduler::new(
                     Arc::clone(&queue),
                     handlers,
-                    Arc::new(Vec::new()),
+                    Arc::clone(&executors),
                     config.max_retries,
                     config.retry_delay_base,
                 ));
@@ -242,7 +289,12 @@ impl FtpServer {
                 let worker_pool = job::WorkerPool::new(
                     config.max_parallel_jobs,
                     Arc::clone(&queue),
-                    Arc::new(Vec::new()),
+                    Arc::clone(&executors),
+                    config
+                        .relay
+                        .as_ref()
+                        .map(|r| r.relay_messages)
+                        .unwrap_or(true),
                 );
 
                 let scheduler_clone = Arc::clone(&scheduler);
@@ -261,7 +313,7 @@ impl FtpServer {
                 let worker_handle = tokio::spawn(async move { worker_pool.run().await });
 
                 println!(
-                    "[Premium] Background jobs started ({} workers, queue capacity: {})",
+                    "[Background] Background jobs started ({} workers, queue capacity: {})",
                     config.max_parallel_jobs, config.queue_capacity
                 );
 
@@ -288,7 +340,7 @@ impl FtpServer {
             event_process.abort();
             retry_handle.abort();
             worker_handle.abort();
-            println!("[Premium] Background jobs stopped");
+            println!("[Background] Background jobs stopped");
         }
 
         result
