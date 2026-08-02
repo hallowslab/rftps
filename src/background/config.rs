@@ -10,6 +10,7 @@ pub struct BackgroundJobConfig {
     pub max_retries: u32,
     pub queue_capacity: usize,
     pub remote_storage: Option<RemoteStorageConfig>,
+    pub storage: Option<VersionedBackendConfig>,
     pub user_mapping: UserMapping,
     #[cfg(feature = "relay")]
     pub relay: Option<RelayConfig>,
@@ -24,6 +25,7 @@ impl Default for BackgroundJobConfig {
             max_retries: 3,
             queue_capacity: 1000,
             remote_storage: None,
+            storage: None,
             user_mapping: UserMapping::PrefixUserName,
             #[cfg(feature = "relay")]
             relay: None,
@@ -115,6 +117,7 @@ pub struct S3Config {
     pub session_token: Option<String>,
     pub path_prefix: String,
     pub ca_cert_pem: Option<String>,
+    pub multipart_threshold_bytes: Option<u64>,
 }
 
 impl Default for S3Config {
@@ -129,6 +132,7 @@ impl Default for S3Config {
             session_token: None,
             path_prefix: String::new(),
             ca_cert_pem: None,
+            multipart_threshold_bytes: None,
         }
     }
 }

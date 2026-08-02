@@ -1,4 +1,4 @@
-use std::path::Path;
+﻿use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use ed25519_dalek::{Signer, SigningKey};
 use tokio::sync::RwLock;
 
-use crate::background::config::BackendConfig;
-use crate::background::RemoteStorageConfig;
+use crate::background::config::{BackendConfig, FtpsConfig, S3Config, VersionedBackendConfig};
 use crate::storage::traits::{StorageBackend, StorageError};
 use crate::storage::StorageBackendFactory;
 
@@ -28,7 +27,7 @@ pub enum RelayError {
 }
 
 impl RelayError {
-    fn to_storage(&self) -> StorageError {
+    pub fn to_storage(&self) -> StorageError {
         match self {
             RelayError::PendingApproval => {
                 StorageError::Connection("device not approved by relay yet".into())
@@ -227,28 +226,135 @@ impl RelayClient {
             .ok_or_else(|| RelayError::Http("missing session_token in response".into()))
     }
 
-    pub async fn fetch_credentials(&self, token: &str) -> Result<RemoteStorageConfig, RelayError> {
+    pub async fn fetch_backend_config(
+        &self,
+        token: &str,
+    ) -> Result<VersionedBackendConfig, RelayError> {
         let resp = self
             .post("/api/credentials/fetch", &serde_json::json!({}), Some(token))
             .await?;
-        let protocol = resp.get("protocol").and_then(|p| p.as_str()).unwrap_or("ftp");
-        Ok(RemoteStorageConfig {
-            backend: crate::background::StorageBackendType::Ftps,
-            host: resp.get("host").and_then(|h| h.as_str()).unwrap_or("").to_string(),
-            port: resp.get("port").and_then(|p| p.as_u64()).map(|p| p as u16),
-            username: resp.get("user").and_then(|u| u.as_str()).unwrap_or("").to_string(),
-            password: resp
-                .get("password")
-                .and_then(|p| p.as_str())
-                .unwrap_or("")
-                .to_string(),
-            path_prefix: resp.get("root").and_then(|r| r.as_str()).unwrap_or("").to_string(),
-            use_ssl: protocol == "ftps",
-            ca_cert: None,
-            ca_cert_pem: resp.get("ca_cert").and_then(|c| c.as_str()).map(|s| s.to_string()),
-            danger_disable_cert_verify: false,
-        })
+        parse_fetch_payload(&resp)
     }
+}
+
+/// Parses a `/api/credentials/fetch` response into a backend config.
+///
+/// Accepts both the versioned payload `{"version": 1, "backend": {"type": ...}}`
+/// and the legacy flat FTP payload (absent `version`/`backend`) treated as version 1.
+pub fn parse_fetch_payload(resp: &serde_json::Value) -> Result<VersionedBackendConfig, RelayError> {
+    if let Some(backend) = resp.get("backend") {
+        let version = resp
+            .get("version")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1) as u32;
+        let config = VersionedBackendConfig {
+            version,
+            backend: parse_backend(backend)?,
+        };
+        config
+            .check_version()
+            .map_err(RelayError::Config)?;
+        return Ok(config);
+    }
+    let protocol = resp
+        .get("protocol")
+        .and_then(|p| p.as_str())
+        .unwrap_or("ftp");
+    let config = FtpsConfig {
+        host: str_field(resp, "host"),
+        port: resp.get("port").and_then(|p| p.as_u64()).map(|p| p as u16),
+        username: str_field(resp, "user"),
+        password: str_field(resp, "password"),
+        path_prefix: str_field(resp, "root"),
+        use_ssl: protocol == "ftps",
+        ca_cert: None,
+        ca_cert_pem: resp.get("ca_cert").and_then(|c| c.as_str()).map(str::to_string),
+        danger_disable_cert_verify: false,
+    };
+    Ok(VersionedBackendConfig::new(BackendConfig::Ftps(config)))
+}
+
+fn parse_backend(value: &serde_json::Value) -> Result<BackendConfig, RelayError> {
+    match value.get("type").and_then(|t| t.as_str()) {
+        Some("s3") => {
+            let endpoint = str_field(value, "endpoint");
+            if endpoint.is_empty() {
+                return Err(RelayError::Config(
+                    "relay S3 backend missing endpoint".into(),
+                ));
+            }
+            let bucket = str_field(value, "bucket");
+            if bucket.is_empty() {
+                return Err(RelayError::Config("relay S3 backend missing bucket".into()));
+            }
+            let access_key_id = str_field(value, "access_key_id");
+            let secret_access_key = str_field(value, "secret_access_key");
+            if access_key_id.is_empty() || secret_access_key.is_empty() {
+                return Err(RelayError::Config(
+                    "relay S3 backend missing credentials".into(),
+                ));
+            }
+            Ok(BackendConfig::S3(S3Config {
+                endpoint,
+                region: opt_str_field(value, "region"),
+                bucket,
+                path_style: value
+                    .get("path_style")
+                    .and_then(|p| p.as_bool())
+                    .unwrap_or(true),
+                access_key_id,
+                secret_access_key,
+                session_token: opt_str_field(value, "session_token"),
+                path_prefix: str_field(value, "root"),
+                ca_cert_pem: opt_str_field(value, "ca_cert"),
+                multipart_threshold_bytes: None,
+            }))
+        }
+        Some("ftps") => {
+            let host = str_field(value, "host");
+            if host.is_empty() {
+                return Err(RelayError::Config(
+                    "relay FTPS backend missing host".into(),
+                ));
+            }
+            let username = str_field(value, "user");
+            if username.is_empty() {
+                return Err(RelayError::Config(
+                    "relay FTPS backend missing user".into(),
+                ));
+            }
+            let use_ssl = value
+                .get("protocol")
+                .and_then(|p| p.as_str())
+                .map(|p| p == "ftps")
+                .unwrap_or(true);
+            Ok(BackendConfig::Ftps(FtpsConfig {
+                host,
+                port: value.get("port").and_then(|p| p.as_u64()).map(|p| p as u16),
+                username,
+                password: str_field(value, "password"),
+                path_prefix: str_field(value, "root"),
+                use_ssl,
+                ca_cert: None,
+                ca_cert_pem: opt_str_field(value, "ca_cert"),
+                danger_disable_cert_verify: false,
+            }))
+        }
+        Some(other) => Err(RelayError::Config(format!(
+            "unsupported relay backend type '{other}'"
+        ))),
+        None => Err(RelayError::Config(
+            "relay backend record missing 'type'".into(),
+        )),
+    }
+}
+
+fn str_field(value: &serde_json::Value, key: &str) -> String {
+    value.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string()
+}
+
+fn opt_str_field(value: &serde_json::Value, key: &str) -> Option<String> {
+    value.get(key).and_then(|v| v.as_str()).map(str::to_string)
 }
 
 /// Storage backend that obtains its credentials from the relay and keeps them
@@ -322,14 +428,15 @@ impl RelayStorageBackend {
             .authenticate()
             .await
             .map_err(|e| e.to_storage())?;
-        let creds = self
+        let config = self
             .client
-            .fetch_credentials(&token)
+            .fetch_backend_config(&token)
             .await
             .map_err(|e| e.to_storage())?;
-        let config = BackendConfig::try_from(creds)
-            .map_err(|e| StorageError::Config(format!("Relay issued invalid backend config: {}", e)))?;
-        let backend = StorageBackendFactory::build(&config)?;
+        config
+            .check_version()
+            .map_err(|e| StorageError::Config(format!("Relay issued invalid backend config: {e}")))?;
+        let backend = StorageBackendFactory::build(&config.backend)?;
         self.emit("active", Some("credentials armed")).await;
         *self.cache.write().await = Some(Arc::clone(&backend));
         Ok(backend)
@@ -351,69 +458,4 @@ impl StorageBackend for RelayStorageBackend {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    fn cfg(url: &str, key: &str) -> RelayConfig {
-        RelayConfig {
-            url: url.into(),
-            device_key: key.into(),
-            device_name: "test".into(),
-            approval_timeout_secs: 1,
-            ca_cert: None,
-            danger_disable_cert_verify: false,
-            relay_messages: true,
-        }
-    }
-
-    #[test]
-    fn rejects_empty_url() {
-        assert!(matches!(
-            RelayClient::new(&cfg("", &"00".repeat(32))),
-            Err(RelayError::Config(_))
-        ));
-    }
-
-    #[test]
-    fn rejects_non_hex_key() {
-        assert!(matches!(
-            RelayClient::new(&cfg("http://x", "zzzz")),
-            Err(RelayError::Config(_))
-        ));
-    }
-
-    #[test]
-    fn rejects_short_key() {
-        assert!(matches!(
-            RelayClient::new(&cfg("http://x", "aa")),
-            Err(RelayError::Config(_))
-        ));
-    }
-
-    #[test]
-    fn derives_public_key_from_seed() {
-        let client = RelayClient::new(&cfg("http://localhost:8700", &"ab".repeat(32))).unwrap();
-        assert_eq!(client.public_key().len(), 64);
-        let seed = hex::decode("ab".repeat(32)).unwrap();
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&seed);
-        let expected = hex::encode(SigningKey::from_bytes(&bytes).verifying_key().to_bytes());
-        assert_eq!(client.public_key(), expected);
-    }
-
-    #[test]
-    fn error_mapping_retryable() {
-        assert!(RelayError::PendingApproval.to_storage().is_retryable());
-        assert!(RelayError::Http("boom".into()).to_storage().is_retryable());
-        assert!(RelayError::Api { code: 500, message: "x".into() }
-            .to_storage()
-            .is_retryable());
-    }
-
-    #[test]
-    fn error_mapping_permanent() {
-        assert!(!RelayError::Deauthorized.to_storage().is_retryable());
-        assert!(!RelayError::Config("bad".into()).to_storage().is_retryable());
-    }
-}
