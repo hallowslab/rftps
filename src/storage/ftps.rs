@@ -7,12 +7,12 @@ use std::sync::Arc;
 use suppaftp::tokio::{AsyncFtpStream, AsyncRustlsConnector, AsyncRustlsFtpStream};
 use suppaftp::types::FileType;
 
-use super::traits::{StorageBackend, StorageError};
+use super::traits::{BackendCapabilities, Capability, StorageBackend, StorageError};
 use super::tls_utils::NoCertificateVerification;
-use crate::background::RemoteStorageConfig;
+use crate::background::config::FtpsConfig;
 
 pub struct FtpsBackend {
-    config: RemoteStorageConfig,
+    config: FtpsConfig,
 }
 
 enum FtpConn {
@@ -114,7 +114,7 @@ impl FtpConn {
 }
 
 impl FtpsBackend {
-    pub fn new(config: RemoteStorageConfig) -> Self {
+    pub fn new(config: FtpsConfig) -> Self {
         Self { config }
     }
 
@@ -247,6 +247,21 @@ impl StorageBackend for FtpsBackend {
         Ok(())
     }
 
+    fn name(&self) -> &str {
+        "ftp"
+    }
+
+    fn capabilities(&self) -> Option<&dyn BackendCapabilities> {
+        Some(self)
+    }
+}
+
+#[async_trait]
+impl BackendCapabilities for FtpsBackend {
+    fn supports(&self, capability: Capability) -> bool {
+        matches!(capability, Capability::Rename | Capability::Mkdir)
+    }
+
     async fn rename(&self, old_path: &str, new_path: &str) -> Result<(), StorageError> {
         let mut conn = self.connect().await?;
         let old_remote = self.remote_path(old_path);
@@ -264,9 +279,5 @@ impl StorageBackend for FtpsBackend {
         self.mkdir_recursive(&mut conn, &remote).await?;
         conn.quit().await;
         Ok(())
-    }
-
-    fn name(&self) -> &str {
-        "ftp"
     }
 }

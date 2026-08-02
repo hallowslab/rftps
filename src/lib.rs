@@ -252,27 +252,47 @@ impl FtpServer {
 
                 #[cfg(not(feature = "relay"))]
                 if let Some(remote) = config.remote_storage.clone() {
-                    handlers.register(Box::new(
-                        background::ReplicationHandler::new(home_dir.clone()),
-                    ));
-                    executors.push(Box::new(background::ReplicationExecutor::new(
-                        Arc::new(crate::storage::FtpsBackend::new(remote)),
-                        true,
-                    )));
-                    println!("[Background] Replication handler registered (static storage)");
+                    let backend = crate::background::BackendConfig::try_from(remote)
+                        .map_err(|e| format!("[Background] Replication disabled: {}", e))
+                        .and_then(|cfg| {
+                            crate::storage::StorageBackendFactory::build(&cfg)
+                                .map_err(|e| format!("[Background] Replication disabled: {}", e))
+                        });
+                    if let Ok(backend) = backend {
+                        handlers.register(Box::new(
+                            background::ReplicationHandler::new(home_dir.clone()),
+                        ));
+                        executors.push(Box::new(background::ReplicationExecutor::new(
+                            backend,
+                            true,
+                        )));
+                        println!("[Background] Replication handler registered (static storage)");
+                    } else if let Err(msg) = backend {
+                        println!("{}", msg);
+                    }
                 }
 
                 #[cfg(feature = "relay")]
                 if config.relay.is_none() {
                     if let Some(remote) = config.remote_storage.clone() {
-                        handlers.register(Box::new(
-                            background::ReplicationHandler::new(home_dir.clone()),
-                        ));
-                        executors.push(Box::new(background::ReplicationExecutor::new(
-                            Arc::new(crate::storage::FtpsBackend::new(remote)),
-                            true,
-                        )));
-                        println!("[Background] Replication handler registered (static storage)");
+                        let backend = crate::background::BackendConfig::try_from(remote)
+                            .map_err(|e| format!("[Background] Replication disabled: {}", e))
+                            .and_then(|cfg| {
+                                crate::storage::StorageBackendFactory::build(&cfg)
+                                    .map_err(|e| format!("[Background] Replication disabled: {}", e))
+                            });
+                        if let Ok(backend) = backend {
+                            handlers.register(Box::new(
+                                background::ReplicationHandler::new(home_dir.clone()),
+                            ));
+                            executors.push(Box::new(background::ReplicationExecutor::new(
+                                backend,
+                                true,
+                            )));
+                            println!("[Background] Replication handler registered (static storage)");
+                        } else if let Err(msg) = backend {
+                            println!("{}", msg);
+                        }
                     }
                 }
 
@@ -290,11 +310,14 @@ impl FtpServer {
                     config.max_parallel_jobs,
                     Arc::clone(&queue),
                     Arc::clone(&executors),
+                    #[cfg(feature = "relay")]
                     config
                         .relay
                         .as_ref()
                         .map(|r| r.relay_messages)
                         .unwrap_or(true),
+                    #[cfg(not(feature = "relay"))]
+                    true,
                 );
 
                 let scheduler_clone = Arc::clone(&scheduler);

@@ -6,8 +6,10 @@ use async_trait::async_trait;
 use ed25519_dalek::{Signer, SigningKey};
 use tokio::sync::RwLock;
 
+use crate::background::config::BackendConfig;
 use crate::background::RemoteStorageConfig;
 use crate::storage::traits::{StorageBackend, StorageError};
+use crate::storage::StorageBackendFactory;
 
 use super::config::RelayConfig;
 
@@ -253,7 +255,7 @@ impl RelayClient {
 /// in memory for the process lifetime (ADR-007 / ADR-010).
 pub struct RelayStorageBackend {
     client: Arc<RelayClient>,
-    cache: RwLock<Option<RemoteStorageConfig>>,
+    cache: RwLock<Option<Arc<dyn StorageBackend>>>,
     bus: Option<crate::event::EventBus>,
 }
 
@@ -286,9 +288,9 @@ impl RelayStorageBackend {
         }
     }
 
-    async fn credentials(&self) -> Result<RemoteStorageConfig, StorageError> {
-        if let Some(creds) = self.cache.read().await.as_ref() {
-            return Ok(creds.clone());
+    async fn backend(&self) -> Result<Arc<dyn StorageBackend>, StorageError> {
+        if let Some(backend) = self.cache.read().await.as_ref() {
+            return Ok(Arc::clone(backend));
         }
         self.emit("registering", None).await;
         self.client
@@ -325,36 +327,23 @@ impl RelayStorageBackend {
             .fetch_credentials(&token)
             .await
             .map_err(|e| e.to_storage())?;
+        let config = BackendConfig::try_from(creds)
+            .map_err(|e| StorageError::Config(format!("Relay issued invalid backend config: {}", e)))?;
+        let backend = StorageBackendFactory::build(&config)?;
         self.emit("active", Some("credentials armed")).await;
-        *self.cache.write().await = Some(creds.clone());
-        Ok(creds)
+        *self.cache.write().await = Some(Arc::clone(&backend));
+        Ok(backend)
     }
 }
 
 #[async_trait]
 impl StorageBackend for RelayStorageBackend {
     async fn upload(&self, source_path: &Path, dest_path: &str) -> Result<(), StorageError> {
-        let creds = self.credentials().await?;
-        crate::storage::FtpsBackend::new(creds)
-            .upload(source_path, dest_path)
-            .await
+        self.backend().await?.upload(source_path, dest_path).await
     }
 
     async fn delete(&self, path: &str) -> Result<(), StorageError> {
-        let creds = self.credentials().await?;
-        crate::storage::FtpsBackend::new(creds).delete(path).await
-    }
-
-    async fn rename(&self, old_path: &str, new_path: &str) -> Result<(), StorageError> {
-        let creds = self.credentials().await?;
-        crate::storage::FtpsBackend::new(creds)
-            .rename(old_path, new_path)
-            .await
-    }
-
-    async fn mkdir(&self, path: &str) -> Result<(), StorageError> {
-        let creds = self.credentials().await?;
-        crate::storage::FtpsBackend::new(creds).mkdir(path).await
+        self.backend().await?.delete(path).await
     }
 
     fn name(&self) -> &str {
