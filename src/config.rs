@@ -34,6 +34,10 @@ pub struct Args {
     /// Key PEM file
     #[arg(long)]
     pub key_pem: Option<String>,
+
+    /// Path to background jobs config file (plaintext JSON)
+    #[arg(long)]
+    pub config: Option<String>,
 }
 
 pub fn validate_username(username: &str) -> Result<String, String> {
