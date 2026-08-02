@@ -1,3 +1,5 @@
+#![cfg(feature = "background-jobs")]
+
 use rftps::job::queue::InMemoryQueue;
 use rftps::job::{JobQueue, JobType, JobStatus};
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "background-jobs")]
+
 use rftps::event::{EventBus, FtpEvent};
 use std::time::SystemTime;
 

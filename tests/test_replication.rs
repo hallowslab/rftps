@@ -1,3 +1,5 @@
+#![cfg(feature = "background-jobs")]
+
 use rftps::background::{ReplicationHandler, ReplicationExecutor};
 use rftps::event::{EventHandler, FtpEvent};
 use rftps::job::{JobExecutor, JobType, JobError};
@@ -17,12 +19,6 @@ impl StorageBackend for MockStorageBackend {
     async fn delete(&self, _path: &str) -> Result<(), rftps::storage::StorageError> {
         Ok(())
     }
-    async fn rename(&self, _old: &str, _new: &str) -> Result<(), rftps::storage::StorageError> {
-        Ok(())
-    }
-    async fn mkdir(&self, _path: &str) -> Result<(), rftps::storage::StorageError> {
-        Ok(())
-    }
     fn name(&self) -> &str {
         "mock"
     }
@@ -36,12 +32,6 @@ impl StorageBackend for FailingStorageBackend {
         Err(rftps::storage::StorageError::Connection("mock failure".into()))
     }
     async fn delete(&self, _path: &str) -> Result<(), rftps::storage::StorageError> {
-        Ok(())
-    }
-    async fn rename(&self, _old: &str, _new: &str) -> Result<(), rftps::storage::StorageError> {
-        Ok(())
-    }
-    async fn mkdir(&self, _path: &str) -> Result<(), rftps::storage::StorageError> {
         Ok(())
     }
     fn name(&self) -> &str {

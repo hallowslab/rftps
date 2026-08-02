@@ -1,4 +1,6 @@
-use rftps::background::RemoteStorageConfig;
+#![cfg(feature = "background-jobs")]
+
+use rftps::background::FtpsConfig;
 use rftps::storage::StorageBackend;
 use rustls::pki_types::{CertificateDer, pem::PemObject};
 use std::io::Write;
@@ -69,8 +71,7 @@ fn test_load_ca_cert_pem_content() {
 
 #[test]
 fn test_ftps_backend_with_custom_ca_config() {
-    let config = RemoteStorageConfig {
-        backend: rftps::background::StorageBackendType::Ftps,
+    let config = FtpsConfig {
         host: "test.local".into(),
         port: Some(990),
         username: "user".into(),
@@ -88,8 +89,7 @@ fn test_ftps_backend_with_custom_ca_config() {
 
 #[test]
 fn test_ftps_backend_with_danger_mode() {
-    let config = RemoteStorageConfig {
-        backend: rftps::background::StorageBackendType::Ftps,
+    let config = FtpsConfig {
         host: "test.local".into(),
         port: Some(21),
         username: "user".into(),
@@ -107,8 +107,7 @@ fn test_ftps_backend_with_danger_mode() {
 
 #[test]
 fn test_ftps_backend_with_inline_ca_pem() {
-    let config = RemoteStorageConfig {
-        backend: rftps::background::StorageBackendType::Ftps,
+    let config = FtpsConfig {
         host: "test.local".into(),
         port: Some(990),
         username: "user".into(),
@@ -164,8 +163,7 @@ fn test_danger_config_with_no_cert_verifier() {
 
 #[test]
 fn test_ftps_backend_config_construction() {
-    let config = RemoteStorageConfig {
-        backend: rftps::background::StorageBackendType::Ftps,
+    let config = FtpsConfig {
         host: "test.local".into(),
         port: Some(990),
         username: "user".into(),

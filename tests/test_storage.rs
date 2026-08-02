@@ -1,3 +1,5 @@
+#![cfg(feature = "background-jobs")]
+
 use rftps::storage::StorageError;
 
 #[test]
