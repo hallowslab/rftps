@@ -1,5 +1,5 @@
 use rand::distr::Alphanumeric;
-use rand::{Rng, RngExt, rng};
+use rand::{RngExt, rng};
 use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
