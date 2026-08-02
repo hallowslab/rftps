@@ -35,6 +35,14 @@ pub struct Args {
     #[arg(long)]
     pub key_pem: Option<String>,
 
+    /// Passive data-port range, e.g. "50000-50100"
+    #[arg(long)]
+    pub passive_ports: Option<String>,
+
+    /// IP/host advertised in PASV responses (NAT/Docker external address)
+    #[arg(long)]
+    pub external_ip: Option<String>,
+
     /// Path to background jobs config file (plaintext JSON)
     #[arg(long)]
     pub config: Option<String>,
