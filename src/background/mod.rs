@@ -3,7 +3,10 @@ pub mod replication;
 #[cfg(feature = "relay")]
 pub mod relay;
 
-pub use config::{BackgroundJobConfig, RemoteStorageConfig, StorageBackendType, UserMapping};
+pub use config::{
+    BackendConfig, BackgroundJobConfig, FtpsConfig, RemoteStorageConfig, S3Config,
+    StorageBackendType, UserMapping, VersionedBackendConfig, BACKEND_CONFIG_VERSION,
+};
 pub use replication::{ReplicationExecutor, ReplicationHandler};
 #[cfg(feature = "relay")]
 pub use relay::{RelayClient, RelayError, RelayStorageBackend};

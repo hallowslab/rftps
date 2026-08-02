@@ -80,6 +80,111 @@ pub enum StorageBackendType {
     S3,
 }
 
+pub const BACKEND_CONFIG_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BackendConfig {
+    Ftps(FtpsConfig),
+    S3(S3Config),
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct FtpsConfig {
+    pub host: String,
+    pub port: Option<u16>,
+    pub username: String,
+    pub password: String,
+    pub path_prefix: String,
+    pub use_ssl: bool,
+    pub ca_cert: Option<String>,
+    pub ca_cert_pem: Option<String>,
+    pub danger_disable_cert_verify: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct S3Config {
+    pub endpoint: String,
+    pub region: Option<String>,
+    pub bucket: String,
+    pub path_style: bool,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub session_token: Option<String>,
+    pub path_prefix: String,
+    pub ca_cert_pem: Option<String>,
+}
+
+impl Default for S3Config {
+    fn default() -> Self {
+        Self {
+            endpoint: String::new(),
+            region: None,
+            bucket: String::new(),
+            path_style: true,
+            access_key_id: String::new(),
+            secret_access_key: String::new(),
+            session_token: None,
+            path_prefix: String::new(),
+            ca_cert_pem: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VersionedBackendConfig {
+    pub version: u32,
+    pub backend: BackendConfig,
+}
+
+impl VersionedBackendConfig {
+    pub fn new(backend: BackendConfig) -> Self {
+        Self {
+            version: BACKEND_CONFIG_VERSION,
+            backend,
+        }
+    }
+
+    pub fn check_version(&self) -> Result<(), String> {
+        if self.version > BACKEND_CONFIG_VERSION {
+            Err(format!(
+                "backend config version {} is newer than supported version {}",
+                self.version, BACKEND_CONFIG_VERSION
+            ))
+        } else if self.version == 0 {
+            Err("backend config version must be at least 1".into())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl TryFrom<RemoteStorageConfig> for BackendConfig {
+    type Error = String;
+
+    fn try_from(legacy: RemoteStorageConfig) -> Result<Self, Self::Error> {
+        match legacy.backend {
+            StorageBackendType::Ftps => Ok(BackendConfig::Ftps(FtpsConfig {
+                host: legacy.host,
+                port: legacy.port,
+                username: legacy.username,
+                password: legacy.password,
+                path_prefix: legacy.path_prefix,
+                use_ssl: legacy.use_ssl,
+                ca_cert: legacy.ca_cert,
+                ca_cert_pem: legacy.ca_cert_pem,
+                danger_disable_cert_verify: legacy.danger_disable_cert_verify,
+            })),
+            other => Err(format!(
+                "legacy remote_storage shape cannot represent backend type {:?}; use a versioned backend config",
+                other
+            )),
+        }
+    }
+}
+
 #[cfg(feature = "relay")]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
