@@ -24,6 +24,25 @@ pub async fn main() {
             run_relay_init(&argv);
             return;
         }
+        if argv.len() >= 4 && argv[1] == "relay" && argv[2] == "pubkey" {
+            use ed25519_dalek::SigningKey;
+            let bytes = match hex::decode(argv[3].trim()) {
+                Ok(b) => b,
+                Err(_) => {
+                    eprintln!("invalid device key: must be 64 hex chars");
+                    std::process::exit(1);
+                }
+            };
+            if bytes.len() != 32 {
+                eprintln!("invalid device key: must be exactly 32 bytes");
+                std::process::exit(1);
+            }
+            let mut seed = [0u8; 32];
+            seed.copy_from_slice(&bytes);
+            let signing = SigningKey::from_bytes(&seed);
+            println!("{}", hex::encode(signing.verifying_key().to_bytes()));
+            return;
+        }
     }
 
     let args = Args::parse();

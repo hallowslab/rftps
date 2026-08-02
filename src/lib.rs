@@ -55,6 +55,8 @@ pub struct FtpServer {
     enable_ftps: bool,
     cert_path: Option<String>,
     key_path: Option<String>,
+    passive_ports: Option<(u16, u16)>,
+    external_ip: Option<String>,
     #[cfg(feature = "include-pem-files")]
     _temp_certs: Option<(tempfile::NamedTempFile, tempfile::NamedTempFile)>,
     #[cfg(not(feature = "background-jobs"))]
@@ -81,6 +83,23 @@ impl FtpServer {
         let enable_ftps = args.enable_ftps.unwrap_or(true);
         let mut cert_path = args.cert_pem;
         let mut key_path = args.key_pem;
+
+        let passive_ports = match args.passive_ports.as_deref() {
+            Some(s) => {
+                let parts: Vec<&str> = s.split('-').collect();
+                if parts.len() == 2 {
+                    if let (Ok(a), Ok(b)) = (parts[0].parse::<u16>(), parts[1].parse::<u16>()) {
+                        Some((a, b))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+        let external_ip = args.external_ip.clone();
 
         #[cfg(feature = "include-pem-files")]
         let mut _temp_certs = None;
@@ -132,6 +151,8 @@ impl FtpServer {
             enable_ftps,
             cert_path,
             key_path,
+            passive_ports,
+            external_ip,
             #[cfg(feature = "include-pem-files")]
             _temp_certs,
             #[cfg(not(feature = "background-jobs"))]
@@ -190,17 +211,31 @@ impl FtpServer {
         .authenticator(Arc::new(authenticator))
         .user_detail_provider(Arc::new(DefaultUserDetailProvider));
 
+        let mut server_builder = server_builder;
+
+        if let Some((start, end)) = self.passive_ports {
+            server_builder = server_builder.passive_ports(start..=end);
+        }
+
+        if let Some(host) = self.external_ip {
+            if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
+                let o = ip.octets();
+                server_builder = server_builder.passive_host([o[0], o[1], o[2], o[3]]);
+            } else {
+                server_builder = server_builder.passive_host(host.as_str());
+            }
+        }
+
         #[cfg(not(feature = "background-jobs"))]
-        let server_builder = server_builder
+        let mut server_builder = server_builder
             .notify_data(logger::DataLogger { event_tx: event_tx.clone() })
             .notify_presence(logger::ConnectionLogger { event_tx });
 
         #[cfg(feature = "background-jobs")]
-        let server_builder = server_builder
+        let mut server_builder = server_builder
             .notify_data(logger::DataLogger { event_bus: event_bus.clone() })
             .notify_presence(logger::ConnectionLogger { event_bus });
 
-        let mut server_builder = server_builder;
         if self.enable_ftps {
             if let (Some(cert), Some(key)) = (self.cert_path, self.key_path) {
                 println!("FTPS enabled with cert: {} and key: {}", cert, key);
@@ -251,14 +286,8 @@ impl FtpServer {
                 }
 
                 #[cfg(not(feature = "relay"))]
-                if let Some(remote) = config.remote_storage.clone() {
-                    let backend = crate::background::BackendConfig::try_from(remote)
-                        .map_err(|e| format!("[Background] Replication disabled: {}", e))
-                        .and_then(|cfg| {
-                            crate::storage::StorageBackendFactory::build(&cfg)
-                                .map_err(|e| format!("[Background] Replication disabled: {}", e))
-                        });
-                    if let Ok(backend) = backend {
+                match background::build_static_backend(config) {
+                    Ok(backend) => {
                         handlers.register(Box::new(
                             background::ReplicationHandler::new(home_dir.clone()),
                         ));
@@ -267,21 +296,14 @@ impl FtpServer {
                             true,
                         )));
                         println!("[Background] Replication handler registered (static storage)");
-                    } else if let Err(msg) = backend {
-                        println!("{}", msg);
                     }
+                    Err(msg) => println!("{}", msg),
                 }
 
                 #[cfg(feature = "relay")]
                 if config.relay.is_none() {
-                    if let Some(remote) = config.remote_storage.clone() {
-                        let backend = crate::background::BackendConfig::try_from(remote)
-                            .map_err(|e| format!("[Background] Replication disabled: {}", e))
-                            .and_then(|cfg| {
-                                crate::storage::StorageBackendFactory::build(&cfg)
-                                    .map_err(|e| format!("[Background] Replication disabled: {}", e))
-                            });
-                        if let Ok(backend) = backend {
+                    match background::build_static_backend(config) {
+                        Ok(backend) => {
                             handlers.register(Box::new(
                                 background::ReplicationHandler::new(home_dir.clone()),
                             ));
@@ -290,9 +312,8 @@ impl FtpServer {
                                 true,
                             )));
                             println!("[Background] Replication handler registered (static storage)");
-                        } else if let Err(msg) = backend {
-                            println!("{}", msg);
                         }
+                        Err(msg) => println!("{}", msg),
                     }
                 }
 
