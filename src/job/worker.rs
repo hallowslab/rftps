@@ -8,6 +8,7 @@ pub struct Worker {
     queue: Arc<dyn JobQueue>,
     executors: Arc<Vec<Box<dyn JobExecutor>>>,
     shutdown: Arc<Notify>,
+    print_messages: bool,
 }
 
 impl Worker {
@@ -16,12 +17,14 @@ impl Worker {
         queue: Arc<dyn JobQueue>,
         executors: Arc<Vec<Box<dyn JobExecutor>>>,
         shutdown: Arc<Notify>,
+        print_messages: bool,
     ) -> Self {
         Self {
             id,
             queue,
             executors,
             shutdown,
+            print_messages,
         }
     }
 
@@ -29,13 +32,17 @@ impl Worker {
         loop {
             tokio::select! {
                 _ = self.shutdown.notified() => {
-                    println!("[Worker {}] shutting down", self.id);
+                    if self.print_messages {
+                        println!("[Worker {}] shutting down", self.id);
+                    }
                     break;
                 }
                 result = self.queue.pop() => {
                     match result {
                         Ok(Some(mut job)) => {
-                            println!("[Worker {}] processing job {} ({:?})", self.id, job.id, job.job_type);
+                            if self.print_messages {
+                                println!("[Worker {}] processing job {} ({:?})", self.id, job.id, job.job_type);
+                            }
                             job.status = JobStatus::Running;
                             let _ = self.queue.update_status(job.id, JobStatus::Running).await;
 
@@ -70,7 +77,9 @@ impl Worker {
     async fn handle_result(&self, job_id: &JobId, result: JobResult) {
         match result {
             Ok(()) => {
-                println!("[Worker {}] job {} completed", self.id, job_id);
+                if self.print_messages {
+                    println!("[Worker {}] job {} completed", self.id, job_id);
+                }
                 let _ = self.queue.update_status(*job_id, JobStatus::Completed).await;
             }
             Err(e) => {
@@ -96,10 +105,11 @@ impl WorkerPool {
         count: usize,
         queue: Arc<dyn JobQueue>,
         executors: Arc<Vec<Box<dyn JobExecutor>>>,
+        print_messages: bool,
     ) -> Self {
         let shutdown = Arc::new(Notify::new());
         let workers: Vec<Worker> = (0..count)
-            .map(|i| Worker::new(i, Arc::clone(&queue), Arc::clone(&executors), Arc::clone(&shutdown)))
+            .map(|i| Worker::new(i, Arc::clone(&queue), Arc::clone(&executors), Arc::clone(&shutdown), print_messages))
             .collect();
 
         Self { workers, shutdown }
@@ -114,6 +124,7 @@ impl WorkerPool {
                     queue: Arc::clone(&w.queue),
                     executors: Arc::clone(&w.executors),
                     shutdown: Arc::clone(&w.shutdown),
+                    print_messages: w.print_messages,
                 };
                 tokio::spawn(async move { worker.run().await })
             })
