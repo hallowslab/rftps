@@ -10,13 +10,13 @@ use crate::background::config::{BackendConfig, FtpsConfig, S3Config, VersionedBa
 use crate::storage::traits::{StorageBackend, StorageError};
 use crate::storage::StorageBackendFactory;
 
-use super::config::RelayConfig;
+use super::config::BrokerConfig;
 
 #[derive(Debug, thiserror::Error)]
-pub enum RelayError {
+pub enum BrokerError {
     #[error("HTTP error: {0}")]
     Http(String),
-    #[error("Relay API error ({code}): {message}")]
+    #[error("Broker API error ({code}): {message}")]
     Api { code: u16, message: String },
     #[error("device not approved yet")]
     PendingApproval,
@@ -26,24 +26,24 @@ pub enum RelayError {
     Config(String),
 }
 
-impl RelayError {
+impl BrokerError {
     pub fn to_storage(&self) -> StorageError {
         match self {
-            RelayError::PendingApproval => {
-                StorageError::Connection("device not approved by relay yet".into())
+            BrokerError::PendingApproval => {
+                StorageError::Connection("device not approved by broker yet".into())
             }
-            RelayError::Deauthorized => StorageError::PermissionDenied(
-                "device deauthorized by relay".into(),
+            BrokerError::Deauthorized => StorageError::PermissionDenied(
+                "device deauthorized by broker".into(),
             ),
-            RelayError::Http(_) | RelayError::Api { .. } => {
+            BrokerError::Http(_) | BrokerError::Api { .. } => {
                 StorageError::Connection(self.to_string())
             }
-            RelayError::Config(_) => StorageError::Config(self.to_string()),
+            BrokerError::Config(_) => StorageError::Config(self.to_string()),
         }
     }
 }
 
-pub struct RelayClient {
+pub struct BrokerClient {
     base: String,
     http: reqwest::Client,
     signing: SigningKey,
@@ -52,18 +52,18 @@ pub struct RelayClient {
     approval_timeout: Duration,
 }
 
-impl RelayClient {
-    pub fn new(config: &RelayConfig) -> Result<Self, RelayError> {
+impl BrokerClient {
+    pub fn new(config: &BrokerConfig) -> Result<Self, BrokerError> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let base = config.url.trim_end_matches('/').to_string();
         if base.is_empty() {
-            return Err(RelayError::Config("relay.url is empty".into()));
+            return Err(BrokerError::Config("broker.url is empty".into()));
         }
         let bytes = hex::decode(config.device_key.trim())
-            .map_err(|_| RelayError::Config("relay.device_key must be hex".into()))?;
+            .map_err(|_| BrokerError::Config("broker.device_key must be hex".into()))?;
         if bytes.len() != 32 {
-            return Err(RelayError::Config(
-                "relay.device_key must be exactly 32 bytes".into(),
+            return Err(BrokerError::Config(
+                "broker.device_key must be exactly 32 bytes".into(),
             ));
         }
         let mut seed = [0u8; 32];
@@ -75,16 +75,20 @@ impl RelayClient {
         if config.danger_disable_cert_verify {
             builder = builder.danger_accept_invalid_certs(true);
         }
-        if let Some(ca_path) = &config.ca_cert {
+        if let Some(ca_pem) = &config.ca_cert_pem {
+            let cert = reqwest::Certificate::from_pem(ca_pem.as_bytes())
+                .map_err(|e| BrokerError::Config(format!("invalid inline CA cert PEM: {}", e)))?;
+            builder = builder.add_root_certificate(cert);
+        } else if let Some(ca_path) = &config.ca_cert {
             let pem = std::fs::read(ca_path)
-                .map_err(|e| RelayError::Config(format!("cannot read CA cert '{}': {}", ca_path, e)))?;
+                .map_err(|e| BrokerError::Config(format!("cannot read CA cert '{}': {}", ca_path, e)))?;
             let cert = reqwest::Certificate::from_pem(&pem)
-                .map_err(|e| RelayError::Config(format!("invalid CA cert '{}': {}", ca_path, e)))?;
+                .map_err(|e| BrokerError::Config(format!("invalid CA cert '{}': {}", ca_path, e)))?;
             builder = builder.add_root_certificate(cert);
         }
         let http = builder
             .build()
-            .map_err(|e| RelayError::Http(e.to_string()))?;
+            .map_err(|e| BrokerError::Http(e.to_string()))?;
 
         Ok(Self {
             base,
@@ -109,7 +113,7 @@ impl RelayClient {
         path: &str,
         body: &serde_json::Value,
         token: Option<&str>,
-    ) -> Result<serde_json::Value, RelayError> {
+    ) -> Result<serde_json::Value, BrokerError> {
         let mut req = self.http.post(format!("{}{}", self.base, path)).json(body);
         if let Some(t) = token {
             req = req.bearer_auth(t);
@@ -117,7 +121,7 @@ impl RelayClient {
         let resp = req
             .send()
             .await
-            .map_err(|e| RelayError::Http(e.to_string()))?;
+            .map_err(|e| BrokerError::Http(e.to_string()))?;
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         let value: serde_json::Value =
@@ -128,7 +132,7 @@ impl RelayClient {
                 .and_then(|d| d.as_str())
                 .unwrap_or(&text)
                 .to_string();
-            return Err(RelayError::Api {
+            return Err(BrokerError::Api {
                 code: status.as_u16(),
                 message,
             });
@@ -136,13 +140,13 @@ impl RelayClient {
         Ok(value)
     }
 
-    async fn get(&self, path: &str) -> Result<serde_json::Value, RelayError> {
+    async fn get(&self, path: &str) -> Result<serde_json::Value, BrokerError> {
         let resp = self
             .http
             .get(format!("{}{}", self.base, path))
             .send()
             .await
-            .map_err(|e| RelayError::Http(e.to_string()))?;
+            .map_err(|e| BrokerError::Http(e.to_string()))?;
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         let value: serde_json::Value =
@@ -153,7 +157,7 @@ impl RelayClient {
                 .and_then(|d| d.as_str())
                 .unwrap_or(&text)
                 .to_string();
-            return Err(RelayError::Api {
+            return Err(BrokerError::Api {
                 code: status.as_u16(),
                 message,
             });
@@ -161,7 +165,7 @@ impl RelayClient {
         Ok(value)
     }
 
-    pub async fn register(&self) -> Result<(), RelayError> {
+    pub async fn register(&self) -> Result<(), BrokerError> {
         let body = serde_json::json!({
             "public_key": self.public_key_hex,
             "device_info": {"name": self.device_name},
@@ -170,25 +174,25 @@ impl RelayClient {
         Ok(())
     }
 
-    pub async fn wait_for_approval(&self) -> Result<(), RelayError> {
+    pub async fn wait_for_approval(&self) -> Result<(), BrokerError> {
         let deadline = tokio::time::Instant::now() + self.approval_timeout;
         loop {
             if tokio::time::Instant::now() >= deadline {
-                return Err(RelayError::PendingApproval);
+                return Err(BrokerError::PendingApproval);
             }
             let resp = self
                 .get(&format!("/api/devices/status?public_key={}", self.public_key_hex))
                 .await?;
             match resp["status"].as_str() {
                 Some("approved") => return Ok(()),
-                Some("deauthorized") => return Err(RelayError::Deauthorized),
+                Some("deauthorized") => return Err(BrokerError::Deauthorized),
                 _ => {}
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
-    pub async fn authenticate(&self) -> Result<String, RelayError> {
+    pub async fn authenticate(&self) -> Result<String, BrokerError> {
         let challenge = self
             .post(
                 "/api/auth/challenge",
@@ -199,7 +203,7 @@ impl RelayClient {
         let nonce = challenge
             .get("challenge")
             .and_then(|c| c.as_str())
-            .ok_or_else(|| RelayError::Http("missing challenge in response".into()))?;
+            .ok_or_else(|| BrokerError::Http("missing challenge in response".into()))?;
 
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -223,13 +227,13 @@ impl RelayClient {
             .get("session_token")
             .and_then(|t| t.as_str())
             .map(str::to_string)
-            .ok_or_else(|| RelayError::Http("missing session_token in response".into()))
+            .ok_or_else(|| BrokerError::Http("missing session_token in response".into()))
     }
 
     pub async fn fetch_backend_config(
         &self,
         token: &str,
-    ) -> Result<VersionedBackendConfig, RelayError> {
+    ) -> Result<VersionedBackendConfig, BrokerError> {
         let resp = self
             .post("/api/credentials/fetch", &serde_json::json!({}), Some(token))
             .await?;
@@ -241,7 +245,7 @@ impl RelayClient {
 ///
 /// Accepts both the versioned payload `{"version": 1, "backend": {"type": ...}}`
 /// and the legacy flat FTP payload (absent `version`/`backend`) treated as version 1.
-pub fn parse_fetch_payload(resp: &serde_json::Value) -> Result<VersionedBackendConfig, RelayError> {
+pub fn parse_fetch_payload(resp: &serde_json::Value) -> Result<VersionedBackendConfig, BrokerError> {
     if let Some(backend) = resp.get("backend") {
         let version = resp
             .get("version")
@@ -253,7 +257,7 @@ pub fn parse_fetch_payload(resp: &serde_json::Value) -> Result<VersionedBackendC
         };
         config
             .check_version()
-            .map_err(RelayError::Config)?;
+            .map_err(BrokerError::Config)?;
         return Ok(config);
     }
     let protocol = resp
@@ -274,24 +278,24 @@ pub fn parse_fetch_payload(resp: &serde_json::Value) -> Result<VersionedBackendC
     Ok(VersionedBackendConfig::new(BackendConfig::Ftps(config)))
 }
 
-fn parse_backend(value: &serde_json::Value) -> Result<BackendConfig, RelayError> {
+fn parse_backend(value: &serde_json::Value) -> Result<BackendConfig, BrokerError> {
     match value.get("type").and_then(|t| t.as_str()) {
         Some("s3") => {
             let endpoint = str_field(value, "endpoint");
             if endpoint.is_empty() {
-                return Err(RelayError::Config(
-                    "relay S3 backend missing endpoint".into(),
+                return Err(BrokerError::Config(
+                    "broker S3 backend missing endpoint".into(),
                 ));
             }
             let bucket = str_field(value, "bucket");
             if bucket.is_empty() {
-                return Err(RelayError::Config("relay S3 backend missing bucket".into()));
+                return Err(BrokerError::Config("broker S3 backend missing bucket".into()));
             }
             let access_key_id = str_field(value, "access_key_id");
             let secret_access_key = str_field(value, "secret_access_key");
             if access_key_id.is_empty() || secret_access_key.is_empty() {
-                return Err(RelayError::Config(
-                    "relay S3 backend missing credentials".into(),
+                return Err(BrokerError::Config(
+                    "broker S3 backend missing credentials".into(),
                 ));
             }
             Ok(BackendConfig::S3(S3Config {
@@ -308,19 +312,23 @@ fn parse_backend(value: &serde_json::Value) -> Result<BackendConfig, RelayError>
                 path_prefix: str_field(value, "root"),
                 ca_cert_pem: opt_str_field(value, "ca_cert"),
                 multipart_threshold_bytes: None,
+                immutable_naming: value
+                    .get("immutable_naming")
+                    .and_then(|p| p.as_bool())
+                    .unwrap_or(false),
             }))
         }
         Some("ftps") => {
             let host = str_field(value, "host");
             if host.is_empty() {
-                return Err(RelayError::Config(
-                    "relay FTPS backend missing host".into(),
+                return Err(BrokerError::Config(
+                    "broker FTPS backend missing host".into(),
                 ));
             }
             let username = str_field(value, "user");
             if username.is_empty() {
-                return Err(RelayError::Config(
-                    "relay FTPS backend missing user".into(),
+                return Err(BrokerError::Config(
+                    "broker FTPS backend missing user".into(),
                 ));
             }
             let use_ssl = value
@@ -340,11 +348,11 @@ fn parse_backend(value: &serde_json::Value) -> Result<BackendConfig, RelayError>
                 danger_disable_cert_verify: false,
             }))
         }
-        Some(other) => Err(RelayError::Config(format!(
-            "unsupported relay backend type '{other}'"
+        Some(other) => Err(BrokerError::Config(format!(
+            "unsupported broker backend type '{other}'"
         ))),
-        None => Err(RelayError::Config(
-            "relay backend record missing 'type'".into(),
+        None => Err(BrokerError::Config(
+            "broker backend record missing 'type'".into(),
         )),
     }
 }
@@ -357,37 +365,40 @@ fn opt_str_field(value: &serde_json::Value, key: &str) -> Option<String> {
     value.get(key).and_then(|v| v.as_str()).map(str::to_string)
 }
 
-/// Storage backend that obtains its credentials from the relay and keeps them
+/// Storage backend that obtains its credentials from the broker and keeps them
 /// in memory for the process lifetime (ADR-007 / ADR-010).
-pub struct RelayStorageBackend {
-    client: Arc<RelayClient>,
+pub struct BrokerStorageBackend {
+    client: Arc<BrokerClient>,
     cache: RwLock<Option<Arc<dyn StorageBackend>>>,
     bus: Option<crate::event::EventBus>,
+    immutable_naming: bool,
 }
 
-/// Generates a fresh hex-encoded Ed25519 device seed (same as `rftps relay keygen`).
+/// Generates a fresh hex-encoded Ed25519 device seed (same as `rftps broker keygen`).
 pub fn generate_device_key() -> String {
     use ed25519_dalek::SigningKey;
     use rand_core::OsRng;
     hex::encode(SigningKey::generate(&mut OsRng).to_bytes())
 }
 
-impl RelayStorageBackend {
-    pub fn new(config: RelayConfig, bus: Option<crate::event::EventBus>) -> Result<Self, RelayError> {
+impl BrokerStorageBackend {
+    pub fn new(config: BrokerConfig, bus: Option<crate::event::EventBus>) -> Result<Self, BrokerError> {
+        let immutable_naming = config.immutable_naming;
         Ok(Self {
-            client: Arc::new(RelayClient::new(&config)?),
+            client: Arc::new(BrokerClient::new(&config)?),
             cache: RwLock::new(None),
             bus,
+            immutable_naming,
         })
     }
 
-    pub fn client(&self) -> &RelayClient {
+    pub fn client(&self) -> &BrokerClient {
         &self.client
     }
 
     async fn emit(&self, status: &str, message: Option<&str>) {
         if let Some(bus) = &self.bus {
-            bus.publish(&crate::event::FtpEvent::RelayStatus {
+            bus.publish(&crate::event::FtpEvent::BrokerStatus {
                 status: status.into(),
                 message: message.map(|m| m.to_string()),
             });
@@ -428,14 +439,22 @@ impl RelayStorageBackend {
             .authenticate()
             .await
             .map_err(|e| e.to_storage())?;
-        let config = self
+        let mut config = self
             .client
             .fetch_backend_config(&token)
             .await
             .map_err(|e| e.to_storage())?;
         config
             .check_version()
-            .map_err(|e| StorageError::Config(format!("Relay issued invalid backend config: {e}")))?;
+            .map_err(|e| StorageError::Config(format!("Broker issued invalid backend config: {e}")))?;
+        
+        // Merge client-side immutable_naming setting into S3Config if present
+        if let crate::background::config::BackendConfig::S3(ref mut s3_config) = config.backend {
+            if self.immutable_naming {
+                s3_config.immutable_naming = true;
+            }
+        }
+        
         let backend = StorageBackendFactory::build(&config.backend)?;
         self.emit("active", Some("credentials armed")).await;
         *self.cache.write().await = Some(Arc::clone(&backend));
@@ -444,7 +463,7 @@ impl RelayStorageBackend {
 }
 
 #[async_trait]
-impl StorageBackend for RelayStorageBackend {
+impl StorageBackend for BrokerStorageBackend {
     async fn upload(&self, source_path: &Path, dest_path: &str) -> Result<(), StorageError> {
         self.backend().await?.upload(source_path, dest_path).await
     }
@@ -454,8 +473,6 @@ impl StorageBackend for RelayStorageBackend {
     }
 
     fn name(&self) -> &str {
-        "relay"
+        "broker"
     }
 }
-
-

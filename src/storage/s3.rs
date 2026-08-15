@@ -19,6 +19,10 @@ const S3_KEY_ENCODE: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'_')
     .remove(b'.');
 
+fn generate_immutable_prefix() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
 pub const DEFAULT_MULTIPART_THRESHOLD: u64 = 8 * 1024 * 1024;
 pub const MIN_PART_SIZE: u64 = 5 * 1024 * 1024;
 pub const MAX_PART_COUNT: u64 = 10_000;
@@ -63,13 +67,29 @@ impl S3Backend {
 
     pub fn object_key(&self, path: &str) -> String {
         let trimmed = path.trim_start_matches('/');
-        if self.config.path_prefix.is_empty() {
+        
+        let final_path = if self.config.immutable_naming {
+            // Extract filename and prepend UUID
+            if let Some(last_slash) = trimmed.rfind('/') {
+                let dir = &trimmed[..last_slash];
+                let filename = &trimmed[last_slash + 1..];
+                let uuid = generate_immutable_prefix();
+                format!("{}/{}-{}", dir, uuid, filename)
+            } else {
+                let uuid = generate_immutable_prefix();
+                format!("{}-{}", uuid, trimmed)
+            }
+        } else {
             trimmed.to_string()
+        };
+        
+        if self.config.path_prefix.is_empty() {
+            final_path
         } else {
             format!(
                 "{}/{}",
                 self.config.path_prefix.trim_end_matches('/'),
-                trimmed
+                final_path
             )
         }
     }
@@ -119,11 +139,18 @@ impl S3Backend {
         let mut part_number: i32 = 1;
 
         loop {
-            let n = file.read(&mut buf).await.map_err(StorageError::Io)?;
-            if n == 0 {
+            let mut filled = 0usize;
+            while filled < buf.len() {
+                let n = file.read(&mut buf[filled..]).await.map_err(StorageError::Io)?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+            if filled == 0 {
                 break;
             }
-            buf.truncate(n);
+            buf.truncate(filled);
             let body = ByteStream::from(std::mem::take(&mut buf));
             buf.resize(part_size as usize, 0);
 

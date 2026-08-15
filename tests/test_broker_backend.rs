@@ -1,48 +1,50 @@
-#![cfg(all(feature = "background-jobs", feature = "relay"))]
+#![cfg(all(feature = "background-jobs", feature = "broker"))]
 
 use ed25519_dalek::SigningKey;
-use rftps::background::config::{BackendConfig, RelayConfig};
-use rftps::background::relay::{parse_fetch_payload, RelayClient, RelayError};
+use rftps::background::config::{BackendConfig, BrokerConfig};
+use rftps::background::broker::{parse_fetch_payload, BrokerClient, BrokerError};
 
-fn cfg(url: &str, key: &str) -> RelayConfig {
-    RelayConfig {
+fn cfg(url: &str, key: &str) -> BrokerConfig {
+    BrokerConfig {
         url: url.into(),
         device_key: key.into(),
         device_name: "test".into(),
         approval_timeout_secs: 1,
         ca_cert: None,
+        ca_cert_pem: None,
         danger_disable_cert_verify: false,
-        relay_messages: true,
+        broker_messages: true,
+        immutable_naming: false,
     }
 }
 
 #[test]
 fn rejects_empty_url() {
     assert!(matches!(
-        RelayClient::new(&cfg("", &"00".repeat(32))),
-        Err(RelayError::Config(_))
+        BrokerClient::new(&cfg("", &"00".repeat(32))),
+        Err(BrokerError::Config(_))
     ));
 }
 
 #[test]
 fn rejects_non_hex_key() {
     assert!(matches!(
-        RelayClient::new(&cfg("http://x", "zzzz")),
-        Err(RelayError::Config(_))
+        BrokerClient::new(&cfg("http://x", "zzzz")),
+        Err(BrokerError::Config(_))
     ));
 }
 
 #[test]
 fn rejects_short_key() {
     assert!(matches!(
-        RelayClient::new(&cfg("http://x", "aa")),
-        Err(RelayError::Config(_))
+        BrokerClient::new(&cfg("http://x", "aa")),
+        Err(BrokerError::Config(_))
     ));
 }
 
 #[test]
 fn derives_public_key_from_seed() {
-    let client = RelayClient::new(&cfg("http://localhost:8700", &"ab".repeat(32))).unwrap();
+    let client = BrokerClient::new(&cfg("http://localhost:8700", &"ab".repeat(32))).unwrap();
     assert_eq!(client.public_key().len(), 64);
     let seed = hex::decode("ab".repeat(32)).unwrap();
     let mut bytes = [0u8; 32];
@@ -53,17 +55,17 @@ fn derives_public_key_from_seed() {
 
 #[test]
 fn error_mapping_retryable() {
-    assert!(RelayError::PendingApproval.to_storage().is_retryable());
-    assert!(RelayError::Http("boom".into()).to_storage().is_retryable());
-    assert!(RelayError::Api { code: 500, message: "x".into() }
+    assert!(BrokerError::PendingApproval.to_storage().is_retryable());
+    assert!(BrokerError::Http("boom".into()).to_storage().is_retryable());
+    assert!(BrokerError::Api { code: 500, message: "x".into() }
         .to_storage()
         .is_retryable());
 }
 
 #[test]
 fn error_mapping_permanent() {
-    assert!(!RelayError::Deauthorized.to_storage().is_retryable());
-    assert!(!RelayError::Config("bad".into()).to_storage().is_retryable());
+    assert!(!BrokerError::Deauthorized.to_storage().is_retryable());
+    assert!(!BrokerError::Config("bad".into()).to_storage().is_retryable());
 }
 
 #[test]
@@ -186,7 +188,7 @@ fn rejects_missing_s3_endpoint() {
     });
     assert!(matches!(
         parse_fetch_payload(&resp),
-        Err(RelayError::Config(_))
+        Err(BrokerError::Config(_))
     ));
 }
 
@@ -198,7 +200,7 @@ fn rejects_unknown_backend_type() {
     });
     assert!(matches!(
         parse_fetch_payload(&resp),
-        Err(RelayError::Config(_))
+        Err(BrokerError::Config(_))
     ));
 }
 
@@ -210,6 +212,6 @@ fn rejects_future_version() {
     });
     assert!(matches!(
         parse_fetch_payload(&resp),
-        Err(RelayError::Config(_))
+        Err(BrokerError::Config(_))
     ));
 }

@@ -13,6 +13,7 @@ fn main() {
         exit(1);
     }
     let out_dir = &args[1];
+    std::fs::create_dir_all(out_dir).expect("failed to create output dir");
 
     let mut san_dns: Vec<String> = vec!["localhost".to_string()];
     let mut san_ip: Vec<IpAddr> = vec!["127.0.0.1".parse().unwrap()];
@@ -32,7 +33,7 @@ fn main() {
         .push(DnType::CommonName, "rftps");
     params.not_before = rcgen::date_time_ymd(2026, 7, 15);
     params.not_after = rcgen::date_time_ymd(2036, 7, 15);
-    params.subject_alt_names = san_ip.into_iter().map(SanType::IpAddress).collect();
+    params.subject_alt_names.extend(san_ip.into_iter().map(SanType::IpAddress));
 
     let key_pair = KeyPair::generate().expect("failed to generate key");
     let cert = params.self_signed(&key_pair).expect("failed to self-sign cert");

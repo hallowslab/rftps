@@ -266,26 +266,27 @@ impl FtpServer {
 
                 let home_dir = self.user_dir.clone();
 
-                #[cfg(feature = "relay")]
-                if let Some(relay_cfg) = config.relay.clone() {
-                    match background::relay::RelayStorageBackend::new(relay_cfg.clone(), Some(bus.clone())) {
+                #[cfg(feature = "broker")]
+                if let Some(broker_cfg) = config.broker.clone() {
+                    match background::broker::BrokerStorageBackend::new(broker_cfg.clone(), Some(bus.clone())) {
                         Ok(backend) => {
                             handlers.register(Box::new(
                                 background::ReplicationHandler::new(home_dir.clone()),
                             ));
                             executors.push(Box::new(background::ReplicationExecutor::new(
                                 Arc::new(backend),
-                                relay_cfg.relay_messages,
+                                Some(bus.clone()),
+                                broker_cfg.broker_messages,
                             )));
-                            if relay_cfg.relay_messages {
-                                println!("[Background] Replication handler registered (relay)");
+                            if broker_cfg.broker_messages {
+                                println!("[Background] Replication handler registered (broker)");
                             }
                         }
-                        Err(e) => println!("[Background] Relay disabled: {}", e),
+                        Err(e) => println!("[Background] Broker disabled: {}", e),
                     }
                 }
 
-                #[cfg(not(feature = "relay"))]
+                #[cfg(not(feature = "broker"))]
                 match background::build_static_backend(config) {
                     Ok(backend) => {
                         handlers.register(Box::new(
@@ -293,6 +294,7 @@ impl FtpServer {
                         ));
                         executors.push(Box::new(background::ReplicationExecutor::new(
                             backend,
+                            Some(bus.clone()),
                             true,
                         )));
                         println!("[Background] Replication handler registered (static storage)");
@@ -300,8 +302,8 @@ impl FtpServer {
                     Err(msg) => println!("{}", msg),
                 }
 
-                #[cfg(feature = "relay")]
-                if config.relay.is_none() {
+                #[cfg(feature = "broker")]
+                if config.broker.is_none() {
                     match background::build_static_backend(config) {
                         Ok(backend) => {
                             handlers.register(Box::new(
@@ -309,6 +311,7 @@ impl FtpServer {
                             ));
                             executors.push(Box::new(background::ReplicationExecutor::new(
                                 backend,
+                                Some(bus.clone()),
                                 true,
                             )));
                             println!("[Background] Replication handler registered (static storage)");
@@ -331,13 +334,13 @@ impl FtpServer {
                     config.max_parallel_jobs,
                     Arc::clone(&queue),
                     Arc::clone(&executors),
-                    #[cfg(feature = "relay")]
+                    #[cfg(feature = "broker")]
                     config
-                        .relay
+                        .broker
                         .as_ref()
-                        .map(|r| r.relay_messages)
+                        .map(|b| b.broker_messages)
                         .unwrap_or(true),
-                    #[cfg(not(feature = "relay"))]
+                    #[cfg(not(feature = "broker"))]
                     true,
                 );
 

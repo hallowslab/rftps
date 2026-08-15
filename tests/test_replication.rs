@@ -78,7 +78,7 @@ async fn test_handler_creates_replication_job() {
 
 #[tokio::test]
 async fn test_executor_uploads_file() {
-    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), true);
+    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), None, true);
 
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("test.txt");
@@ -100,7 +100,7 @@ async fn test_executor_uploads_file() {
 
 #[tokio::test]
 async fn test_executor_fails_on_missing_source() {
-    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), true);
+    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), None, true);
 
     let job = rftps::job::Job::new(
         JobType::Replication,
@@ -122,7 +122,7 @@ async fn test_executor_fails_on_missing_source() {
 
 #[tokio::test]
 async fn test_executor_storage_error_is_retryable() {
-    let executor = ReplicationExecutor::new(Arc::new(FailingStorageBackend), true);
+    let executor = ReplicationExecutor::new(Arc::new(FailingStorageBackend), None, true);
 
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("test.txt");
@@ -145,7 +145,7 @@ async fn test_executor_storage_error_is_retryable() {
 
 #[tokio::test]
 async fn test_executor_missing_payload_field() {
-    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), true);
+    let executor = ReplicationExecutor::new(Arc::new(MockStorageBackend), None, true);
 
     let job = rftps::job::Job::new(
         JobType::Replication,

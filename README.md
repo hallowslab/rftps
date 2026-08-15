@@ -48,38 +48,38 @@ cargo build --release --features include-pem-files
 rftps --enable-ftps true --cert-pem ./cert.pem --key-pem ./key.pem
 ```
 
-## 🔄 Replication Setup (Relay)
+## 🔄 Replication Setup (Broker)
 
 rftps can act as a **replication client**: uploaded files are pushed to a
-remote FTP/FTPS server using credentials issued by the ExifFlow Relay (a
+remote FTP/FTPS server using credentials issued by the ExifFlow Access Broker (a
 zero-trust authorization gateway). No credentials are stored on the client —
-they are fetched from the relay at runtime and kept in memory.
+they are fetched from the broker at runtime and kept in memory.
 
-### 1. Build with the relay feature
+### 1. Build with the broker feature
 
 ```bash
-cargo build --release --features relay
+cargo build --release --features broker
 ```
 
-> `relay` includes `background-jobs` and pulls in `reqwest`, `ed25519-dalek`,
+> `broker` includes `background-jobs` and pulls in `reqwest`, `ed25519-dalek`,
 > `rand_core`, and `hex`.
 
-### 2. Generate a config with `relay init`
+### 2. Generate a config with `broker init`
 
 ```bash
-rftps relay init [--output bg.json] [--force]
+rftps broker init [--output bg.json] [--force]
 ```
 
 Prompts (all have defaults — just press Enter to accept):
 
 | Prompt | Default | Notes |
 | ------ | ------- | ----- |
-| relay url | `http://127.0.0.1:8700` | API address of the relay |
-| device name | hostname | Shown on the relay dashboard |
+| broker url | `http://127.0.0.1:8700` | API address of the broker |
+| device name | hostname | Shown on the broker dashboard |
 | approval timeout (s) | `1800` | How long to wait for approval |
-| ca cert file for relay TLS | `none` | Trust anchor for a self-signed reverse proxy |
-| disable relay cert verification? | `n` | Use only for testing |
-| print relay messages? | `y` | `n` = less verbose output |
+| ca cert file for broker TLS | `none` | Trust anchor for a self-signed reverse proxy |
+| disable broker cert verification? | `n` | Use only for testing |
+| print broker messages? | `y` | `n` = less verbose output |
 
 This writes `bg.json` with a fresh Ed25519 device key.
 
@@ -89,35 +89,35 @@ This writes `bg.json` with a fresh Ed25519 device key.
 rftps --config bg.json --directory /path/to/upload-root --username user --password pass
 ```
 
-On the first upload, the device registers with the relay. Approve it in the
-relay dashboard (`http://127.0.0.1:8701/dashboard`) — subsequent uploads
+On the first upload, the device registers with the broker. Approve it in the
+broker dashboard (`http://127.0.0.1:8701/dashboard`) — subsequent uploads
 replicate automatically.
 
-### 4. Trusting a self-signed relay or storage cert
+### 4. Trusting a self-signed broker or storage cert
 
 Verification is **never** skipped; unknown CAs are added as trusted roots.
 
-* Relay TLS behind a self-signed reverse proxy: pass the proxy's cert with the
-  `ca cert file` prompt (or set `relay.ca_cert` in `bg.json`).
+* Broker TLS behind a self-signed reverse proxy: pass the proxy's cert with the
+  `ca cert file` prompt (or set `broker.ca_cert` in `bg.json`).
 * Self-signed FTPS storage target: generate a cert with
 
   ```bash
   cargo run --example gen_cert -- <outdir> <ip-or-hostname>...
   ```
 
-  and paste `cert.pem` into the relay storage **CA cert** field. The cert must
+  and paste `cert.pem` into the broker storage **CA cert** field. The cert must
   match the address you connect to (IP SANs for IP connections).
 
 ### Manual key generation
 
 ```bash
-rftps relay keygen    # prints a 64-char hex seed for bg.json relay.device_key
+rftps broker keygen    # prints a 64-char hex seed for bg.json broker.device_key
 ```
 
 ### Related docs
 
-The relay itself is a separate component — see the
-[`relay/README.md`](../relay/README.md) for installing and running it.
+The broker itself is a separate component — see the
+[`access-broker/README.md`](../access-broker/README.md) for installing and running it.
 
 ## 📋 Command Line Options
 
@@ -222,7 +222,7 @@ User rftps logged out
 ### Optional Features
 - `include-pem-files` - Enables TLS certificate loading
 - `background-jobs` - Event bus, job queue, and worker pool (file upload → background jobs)
-- `relay` - Replication client against the ExifFlow Relay (includes `background-jobs`)
+- `broker` - Replication client against the ExifFlow Access Broker (includes `background-jobs`)
 
 ## 🤝 Contributing
 

@@ -5,26 +5,26 @@ use tokio::sync::oneshot;
 
 #[tokio::main]
 pub async fn main() {
-    #[cfg(feature = "relay")]
+    #[cfg(feature = "broker")]
     let argv: Vec<String> = std::env::args().collect();
-    #[cfg(not(feature = "relay"))]
+    #[cfg(not(feature = "broker"))]
     let _argv: Vec<String> = Vec::new();
 
-    #[cfg(feature = "relay")]
+    #[cfg(feature = "broker")]
     {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        if argv.len() >= 3 && argv[1] == "relay" && argv[2] == "keygen" {
+        if argv.len() >= 3 && argv[1] == "broker" && argv[2] == "keygen" {
             use ed25519_dalek::SigningKey;
             use rand_core::OsRng;
             let key = SigningKey::generate(&mut OsRng);
             println!("{}", hex::encode(key.to_bytes()));
             return;
         }
-        if argv.len() >= 3 && argv[1] == "relay" && argv[2] == "init" {
-            run_relay_init(&argv);
+        if argv.len() >= 3 && argv[1] == "broker" && argv[2] == "init" {
+            run_broker_init(&argv);
             return;
         }
-        if argv.len() >= 4 && argv[1] == "relay" && argv[2] == "pubkey" {
+        if argv.len() >= 4 && argv[1] == "broker" && argv[2] == "pubkey" {
             use ed25519_dalek::SigningKey;
             let bytes = match hex::decode(argv[3].trim()) {
                 Ok(b) => b,
@@ -108,8 +108,8 @@ pub async fn main() {
     }
 }
 
-#[cfg(feature = "relay")]
-fn run_relay_init(argv: &[String]) {
+#[cfg(feature = "broker")]
+fn run_broker_init(argv: &[String]) {
     use std::io::Write as _;
 
     fn prompt(label: &str, default: Option<&str>) -> String {
@@ -153,9 +153,9 @@ fn run_relay_init(argv: &[String]) {
         hex::encode(SigningKey::generate(&mut OsRng).to_bytes())
     };
 
-    let url = prompt("relay url [http://127.0.0.1:8700]: ", Some("http://127.0.0.1:8700"));
+    let url = prompt("broker url [http://127.0.0.1:8700]: ", Some("http://127.0.0.1:8700"));
     if url.is_empty() {
-        eprintln!("relay url is required");
+        eprintln!("broker url is required");
         std::process::exit(1);
     }
 
@@ -165,21 +165,21 @@ fn run_relay_init(argv: &[String]) {
     let timeout_raw = prompt("approval timeout (seconds) [1800]: ", Some("1800"));
     let approval_timeout_secs: u64 = timeout_raw.trim().parse().unwrap_or(1800);
 
-    let ca_cert = prompt("ca cert file for relay TLS [none]: ", Some("none"));
+    let ca_cert = prompt("ca cert file for broker TLS [none]: ", Some("none"));
     let ca_cert = if ca_cert.is_empty() || ca_cert.eq_ignore_ascii_case("none") {
         None
     } else {
         Some(ca_cert)
     };
 
-    let danger_raw = prompt("disable relay cert verification? [n]: ", Some("n"));
+    let danger_raw = prompt("disable broker cert verification? [n]: ", Some("n"));
     let danger = danger_raw.eq_ignore_ascii_case("y") || danger_raw.eq_ignore_ascii_case("yes");
     if danger {
-        eprintln!("WARNING: relay TLS certificate verification will be disabled");
+        eprintln!("WARNING: broker TLS certificate verification will be disabled");
     }
 
-    let messages_raw = prompt("print relay messages? [y]: ", Some("y"));
-    let relay_messages = messages_raw.eq_ignore_ascii_case("y")
+    let messages_raw = prompt("print broker messages? [y]: ", Some("y"));
+    let broker_messages = messages_raw.eq_ignore_ascii_case("y")
         || messages_raw.eq_ignore_ascii_case("yes")
         || messages_raw.is_empty();
 
@@ -187,14 +187,14 @@ fn run_relay_init(argv: &[String]) {
         "enabled": true,
         "max_parallel_jobs": 2,
         "queue_capacity": 1000,
-        "relay": {
+        "broker": {
             "url": url,
             "device_key": device_key,
             "device_name": device_name,
             "approval_timeout_secs": approval_timeout_secs,
             "ca_cert": ca_cert,
             "danger_disable_cert_verify": danger,
-            "relay_messages": relay_messages,
+            "broker_messages": broker_messages,
         },
     });
 
@@ -213,5 +213,5 @@ fn run_relay_init(argv: &[String]) {
         std::process::exit(1);
     }
     println!("Wrote {}", output);
-    println!("Register the device in the relay UI at http://127.0.0.1:8701/dashboard");
+    println!("Register the device in the broker UI at http://127.0.0.1:8701/dashboard");
 }

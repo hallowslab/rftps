@@ -10,7 +10,8 @@ pub enum FtpEvent {
     DirRemoved { username: String, path: String },
     Renamed { username: String, from: String, to: String },
     Deleted { username: String, path: String },
-    RelayStatus { status: String, message: Option<String> },
+    BrokerStatus { status: String, message: Option<String> },
+    Replication { path: String, ok: bool, error: Option<String> },
 }
 
 impl FtpEvent {
@@ -24,7 +25,8 @@ impl FtpEvent {
             FtpEvent::DirRemoved { .. } => "dir_removed",
             FtpEvent::Renamed { .. } => "renamed",
             FtpEvent::Deleted { .. } => "deleted",
-            FtpEvent::RelayStatus { .. } => "relay_status",
+            FtpEvent::BrokerStatus { .. } => "broker_status",
+            FtpEvent::Replication { .. } => "replication",
         }
     }
 }

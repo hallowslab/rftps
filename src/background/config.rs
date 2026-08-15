@@ -12,8 +12,8 @@ pub struct BackgroundJobConfig {
     pub remote_storage: Option<RemoteStorageConfig>,
     pub storage: Option<VersionedBackendConfig>,
     pub user_mapping: UserMapping,
-    #[cfg(feature = "relay")]
-    pub relay: Option<RelayConfig>,
+    #[cfg(feature = "broker")]
+    pub broker: Option<BrokerConfig>,
 }
 
 impl Default for BackgroundJobConfig {
@@ -27,8 +27,8 @@ impl Default for BackgroundJobConfig {
             remote_storage: None,
             storage: None,
             user_mapping: UserMapping::PrefixUserName,
-            #[cfg(feature = "relay")]
-            relay: None,
+            #[cfg(feature = "broker")]
+            broker: None,
         }
     }
 }
@@ -118,6 +118,7 @@ pub struct S3Config {
     pub path_prefix: String,
     pub ca_cert_pem: Option<String>,
     pub multipart_threshold_bytes: Option<u64>,
+    pub immutable_naming: bool,
 }
 
 impl Default for S3Config {
@@ -133,6 +134,7 @@ impl Default for S3Config {
             path_prefix: String::new(),
             ca_cert_pem: None,
             multipart_threshold_bytes: None,
+            immutable_naming: false,
         }
     }
 }
@@ -189,21 +191,23 @@ impl TryFrom<RemoteStorageConfig> for BackendConfig {
     }
 }
 
-#[cfg(feature = "relay")]
+#[cfg(feature = "broker")]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
-pub struct RelayConfig {
+pub struct BrokerConfig {
     pub url: String,
     pub device_key: String,
     pub device_name: String,
     pub approval_timeout_secs: u64,
     pub ca_cert: Option<String>,
+    pub ca_cert_pem: Option<String>,
     pub danger_disable_cert_verify: bool,
-    pub relay_messages: bool,
+    pub broker_messages: bool,
+    pub immutable_naming: bool,
 }
 
-#[cfg(feature = "relay")]
-impl Default for RelayConfig {
+#[cfg(feature = "broker")]
+impl Default for BrokerConfig {
     fn default() -> Self {
         Self {
             url: String::new(),
@@ -211,8 +215,10 @@ impl Default for RelayConfig {
             device_name: "rftps".into(),
             approval_timeout_secs: 1800,
             ca_cert: None,
+            ca_cert_pem: None,
             danger_disable_cert_verify: false,
-            relay_messages: true,
+            broker_messages: true,
+            immutable_naming: false,
         }
     }
 }
