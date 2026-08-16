@@ -46,10 +46,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Run tests
+      - name: Run tests (default features)
         run: |
           echo "Running tests for ${{ matrix.target }} on ${{ matrix.os }}"
           cargo test
+      - name: Run tests (s3 + broker)
+        run: |
+          echo "Running replication tests for ${{ matrix.target }} on ${{ matrix.os }}"
+          cargo test --features "s3 broker"
 
   build:
     name: Build for ${{ matrix.target }}
@@ -63,22 +67,18 @@ jobs:
             target: ${{ fromJson(needs.setup.outputs.targets)[0] }}
             ext: ""
             a_ext: ".tar.gz"
-            features: "--features include-pem-files"
           - os: macos-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[1] }}
             ext: ""
             a_ext: ".tar.gz"
-            features: "--features include-pem-files"
           - os: macos-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[2] }}
             ext: ""
             a_ext: ".tar.gz"
-            features: "--features include-pem-files"
           - os: windows-latest
             target: ${{ fromJson(needs.setup.outputs.targets)[3] }}
             ext: ".exe"
             a_ext: ".zip"
-            features: "--features include-pem-files"
 
     steps:
       - name: Checkout Code
@@ -98,47 +98,51 @@ jobs:
       - name: Generate SSL Certificate
         run: |
           openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=RFTPS"
-        
-      - name: Move certificates(Unix)
-        if: ${{ matrix.os != 'windows-latest' }}
-        run: cp cert.pem key.pem src/
 
-      - name: Move certificates(Windows)
-        if: ${{ contains(matrix.os, 'windows') }}
-        shell: pwsh
-        run: Copy-Item cert.pem, key.pem -Destination src/
+      # Certs stay at the crate root: include-pem-files embeds ../cert.pem (relative to src/lib.rs).
 
-      - name: Build Application
-        run: cargo build --release --target=${{ matrix.target }} ${{ matrix.features }}
+      - name: Build (plain)
+        run: cargo build --release --target=${{ matrix.target }} --features include-pem-files
 
-      - name: Rename Executable
-        run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-${{ matrix.target }}${{ matrix.ext }}
-      
+      - name: Rename plain executable
+        run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-plain-${{ matrix.target }}${{ matrix.ext }}
+
+      - name: Build (full)
+        run: cargo build --release --target=${{ matrix.target }} --features "s3 broker include-pem-files"
+
+      - name: Rename full executable
+        run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-full-${{ matrix.target }}${{ matrix.ext }}
+
       # Don't pack the windows executables AV will flag them
       # Don't pack for macos, bad support
       - name: Compress Executable with UPX
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: |
-          upx --best --lzma rftps-${{ matrix.target }}${{ matrix.ext }}
+          upx --best --lzma rftps-plain-${{ matrix.target }}${{ matrix.ext }}
+          upx --best --lzma rftps-full-${{ matrix.target }}${{ matrix.ext }}
 
       - name: Archive Files (Windows)
         if: ${{ contains(matrix.os, 'windows') }}
         shell: pwsh
         run: |
-          Compress-Archive -Path rftps-${{ matrix.target }}${{ matrix.ext }}, cert.pem, key.pem -DestinationPath rftps-${{ matrix.target }}${{ matrix.a_ext }}
+          Compress-Archive -Path rftps-plain-${{ matrix.target }}${{ matrix.ext }}, cert.pem, key.pem -DestinationPath rftps-plain-${{ matrix.target }}${{ matrix.a_ext }}
+          Compress-Archive -Path rftps-full-${{ matrix.target }}${{ matrix.ext }}, cert.pem, key.pem -DestinationPath rftps-full-${{ matrix.target }}${{ matrix.a_ext }}
 
       - name: Archive Files (Linux/macOS)
         if: ${{ !contains(matrix.os, 'windows') }}
         run: |
-          tar -czvf rftps-${{ matrix.target }}${{ matrix.a_ext }} rftps-${{ matrix.target }}${{ matrix.ext }} cert.pem key.pem
+          tar -czvf rftps-plain-${{ matrix.target }}${{ matrix.a_ext }} rftps-plain-${{ matrix.target }}${{ matrix.ext }} cert.pem key.pem
+          tar -czvf rftps-full-${{ matrix.target }}${{ matrix.a_ext }} rftps-full-${{ matrix.target }}${{ matrix.ext }} cert.pem key.pem
 
       - name: Upload Archived Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rftps-${{ matrix.target }}${{ matrix.a_ext }}
+          name: rftps-${{ matrix.target }}
           path: |
-            rftps-${{ matrix.target }}.zip
-            rftps-${{ matrix.target }}.tar.gz
+            rftps-plain-${{ matrix.target }}.zip
+            rftps-full-${{ matrix.target }}.zip
+            rftps-plain-${{ matrix.target }}.tar.gz
+            rftps-full-${{ matrix.target }}.tar.gz
 
   release:
     name: Create GitHub Release
