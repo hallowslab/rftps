@@ -2230,7 +2230,7 @@ dependencies = [
 
 [[package]]
 name = "rftps"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",
