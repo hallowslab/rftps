@@ -377,8 +377,9 @@ pub struct BrokerStorageBackend {
 /// Generates a fresh hex-encoded Ed25519 device seed (same as `rftps broker keygen`).
 pub fn generate_device_key() -> String {
     use ed25519_dalek::SigningKey;
-    use rand_core::OsRng;
-    hex::encode(SigningKey::generate(&mut OsRng).to_bytes())
+    use rand::rngs::SysRng;
+    use rand_core::UnwrapErr;
+    hex::encode(SigningKey::generate(&mut UnwrapErr(SysRng)).to_bytes())
 }
 
 impl BrokerStorageBackend {

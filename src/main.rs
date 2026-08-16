@@ -15,8 +15,9 @@ pub async fn main() {
         let _ = rustls::crypto::ring::default_provider().install_default();
         if argv.len() >= 3 && argv[1] == "broker" && argv[2] == "keygen" {
             use ed25519_dalek::SigningKey;
-            use rand_core::OsRng;
-            let key = SigningKey::generate(&mut OsRng);
+            use rand::rngs::SysRng;
+            use rand_core::UnwrapErr;
+            let key = SigningKey::generate(&mut UnwrapErr(SysRng));
             println!("{}", hex::encode(key.to_bytes()));
             return;
         }
@@ -149,8 +150,9 @@ fn run_broker_init(argv: &[String]) {
 
     let device_key = {
         use ed25519_dalek::SigningKey;
-        use rand_core::OsRng;
-        hex::encode(SigningKey::generate(&mut OsRng).to_bytes())
+        use rand::rngs::SysRng;
+        use rand_core::UnwrapErr;
+        hex::encode(SigningKey::generate(&mut UnwrapErr(SysRng)).to_bytes())
     };
 
     let url = prompt("broker url [http://127.0.0.1:8700]: ", Some("http://127.0.0.1:8700"));

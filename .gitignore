@@ -2,3 +2,6 @@
 /rftps
 *.pem
 *.json
+
+# rust-doctor
+.rust-doctor-cache.json
