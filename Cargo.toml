@@ -24,7 +24,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 ed25519-dalek = { version = "2", optional = true, features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"], optional = true }
 hex = { version = "0.4", optional = true }
-aws-sdk-s3 = { version = "1.140.0", optional = true, features = ["rustls", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.140.0", optional = true, default-features = false, features = ["rustls", "rt-tokio"] }
 aws-smithy-http-client = { version = "1.2.0", optional = true, features = ["default-client", "rustls-ring"] }
 aws-smithy-types = { version = "1", optional = true }
 percent-encoding = { version = "2", optional = true }
