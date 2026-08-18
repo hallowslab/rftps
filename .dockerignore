@@ -1,6 +1,0 @@
-.gitignore
-.git/
-/target
-/rftps
-Dockerfile
-*.pem
