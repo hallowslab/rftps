@@ -4,30 +4,11 @@ pub mod utils;
 pub use utils::{generate_random_string, resolve_local_ip, validate_certificates, verify_home};
 pub mod auth;
 pub mod logger;
-
-#[cfg(feature = "background-jobs")]
 pub mod event;
-#[cfg(feature = "background-jobs")]
-pub mod job;
-#[cfg(feature = "background-jobs")]
-pub mod storage;
-#[cfg(feature = "background-jobs")]
-pub mod background;
+pub mod record;
 
-#[cfg(feature = "background-jobs")]
 pub use event::FtpEvent;
-#[cfg(not(feature = "background-jobs"))]
-#[derive(Debug, Clone, serde::Serialize)]
-pub enum FtpEvent {
-    LoggedIn { username: String },
-    LoggedOut { username: String },
-    FileUpload { username: String, path: String },
-    FileDownload { username: String, path: String },
-    DirCreated { username: String, path: String },
-    DirRemoved { username: String, path: String },
-    Renamed { username: String, from: String, to: String },
-    Deleted { username: String, path: String },
-}
+pub use record::RecordStore;
 
 use libunftp::ServerBuilder;
 use unftp_core::auth::DefaultUserDetailProvider;
@@ -59,12 +40,8 @@ pub struct FtpServer {
     external_ip: Option<String>,
     #[cfg(feature = "include-pem-files")]
     _temp_certs: Option<(tempfile::NamedTempFile, tempfile::NamedTempFile)>,
-    #[cfg(not(feature = "background-jobs"))]
-    event_tx: Option<tokio::sync::mpsc::UnboundedSender<FtpEvent>>,
-    #[cfg(feature = "background-jobs")]
     event_bus: Option<event::EventBus>,
-    #[cfg(feature = "background-jobs")]
-    background_config: Option<background::BackgroundJobConfig>,
+    record_store: Option<record::RecordStore>,
 }
 
 impl FtpServer {
@@ -155,30 +132,18 @@ impl FtpServer {
             external_ip,
             #[cfg(feature = "include-pem-files")]
             _temp_certs,
-            #[cfg(not(feature = "background-jobs"))]
-            event_tx: None,
-            #[cfg(feature = "background-jobs")]
             event_bus: None,
-            #[cfg(feature = "background-jobs")]
-            background_config: None,
+            record_store: None,
         })
     }
 
-    #[cfg(not(feature = "background-jobs"))]
-    pub fn with_event_tx(mut self, tx: tokio::sync::mpsc::UnboundedSender<FtpEvent>) -> Self {
-        self.event_tx = Some(tx);
-        self
-    }
-
-    #[cfg(feature = "background-jobs")]
     pub fn with_event_bus(mut self, bus: event::EventBus) -> Self {
         self.event_bus = Some(bus);
         self
     }
 
-    #[cfg(feature = "background-jobs")]
-    pub fn with_background_config(mut self, config: background::BackgroundJobConfig) -> Self {
-        self.background_config = Some(config);
+    pub fn with_record_store(mut self, store: record::RecordStore) -> Self {
+        self.record_store = Some(store);
         self
     }
 
@@ -197,10 +162,6 @@ impl FtpServer {
         };
 
         let root = self.user_dir.clone();
-
-        #[cfg(not(feature = "background-jobs"))]
-        let event_tx = self.event_tx.clone();
-        #[cfg(feature = "background-jobs")]
         let event_bus = self.event_bus.clone();
 
         let server_builder = ServerBuilder::new(Box::new(move || {
@@ -226,12 +187,6 @@ impl FtpServer {
             }
         }
 
-        #[cfg(not(feature = "background-jobs"))]
-        let mut server_builder = server_builder
-            .notify_data(logger::DataLogger { event_tx: event_tx.clone() })
-            .notify_presence(logger::ConnectionLogger { event_tx });
-
-        #[cfg(feature = "background-jobs")]
         let mut server_builder = server_builder
             .notify_data(logger::DataLogger { event_bus: event_bus.clone() })
             .notify_presence(logger::ConnectionLogger { event_bus });
@@ -251,123 +206,24 @@ impl FtpServer {
 
         let addr_str = self.addr.to_string();
 
-        #[cfg(feature = "background-jobs")]
-        let background_handle = if let (Some(bus), Some(config)) =
-            (self.event_bus.as_ref(), self.background_config.as_ref())
+        let record_handle = if let (Some(bus), Some(store)) =
+            (self.event_bus.as_ref(), self.record_store.as_ref())
         {
-            if config.enabled {
-                let (_, subscriber_rx) = bus.subscribe();
-
-                let queue: Arc<dyn job::JobQueue> =
-                    Arc::new(job::queue::InMemoryQueue::new(config.queue_capacity));
-
-                let mut handlers = event::HandlerRegistry::new();
-                let mut executors: Vec<Box<dyn job::JobExecutor>> = Vec::new();
-
-                let home_dir = self.user_dir.clone();
-
-                #[cfg(feature = "broker")]
-                if let Some(broker_cfg) = config.broker.clone() {
-                    match background::broker::BrokerStorageBackend::new(broker_cfg.clone(), Some(bus.clone())) {
-                        Ok(backend) => {
-                            handlers.register(Box::new(
-                                background::ReplicationHandler::new(home_dir.clone()),
-                            ));
-                            executors.push(Box::new(background::ReplicationExecutor::new(
-                                Arc::new(backend),
-                                Some(bus.clone()),
-                                broker_cfg.broker_messages,
-                            )));
-                            if broker_cfg.broker_messages {
-                                println!("[Background] Replication handler registered (broker)");
-                            }
+            let (_, mut rx) = bus.subscribe();
+            let home = self.user_dir.clone();
+            let store = store.clone();
+            let handle = tokio::spawn(async move {
+                while let Some(event) = rx.recv().await {
+                    if let event::FtpEvent::FileUploaded { path, .. } = event {
+                        let (source, dest) = record::resolve_upload_path(&home, &path);
+                        let src = source.to_string_lossy().into_owned();
+                        if let Err(e) = store.insert(&src, &dest, &dest) {
+                            eprintln!("[Record] failed to record upload {}: {}", path, e);
                         }
-                        Err(e) => println!("[Background] Broker disabled: {}", e),
                     }
                 }
-
-                #[cfg(not(feature = "broker"))]
-                match background::build_static_backend(config) {
-                    Ok(backend) => {
-                        handlers.register(Box::new(
-                            background::ReplicationHandler::new(home_dir.clone()),
-                        ));
-                        executors.push(Box::new(background::ReplicationExecutor::new(
-                            backend,
-                            Some(bus.clone()),
-                            true,
-                        )));
-                        println!("[Background] Replication handler registered (static storage)");
-                    }
-                    Err(msg) => println!("{}", msg),
-                }
-
-                #[cfg(feature = "broker")]
-                if config.broker.is_none() {
-                    match background::build_static_backend(config) {
-                        Ok(backend) => {
-                            handlers.register(Box::new(
-                                background::ReplicationHandler::new(home_dir.clone()),
-                            ));
-                            executors.push(Box::new(background::ReplicationExecutor::new(
-                                backend,
-                                Some(bus.clone()),
-                                true,
-                            )));
-                            println!("[Background] Replication handler registered (static storage)");
-                        }
-                        Err(msg) => println!("{}", msg),
-                    }
-                }
-
-                let executors: Arc<Vec<Box<dyn job::JobExecutor>>> = Arc::new(executors);
-
-                let scheduler = Arc::new(job::JobScheduler::new(
-                    Arc::clone(&queue),
-                    handlers,
-                    Arc::clone(&executors),
-                    config.max_retries,
-                    config.retry_delay_base,
-                ));
-
-                let worker_pool = job::WorkerPool::new(
-                    config.max_parallel_jobs,
-                    Arc::clone(&queue),
-                    Arc::clone(&executors),
-                    #[cfg(feature = "broker")]
-                    config
-                        .broker
-                        .as_ref()
-                        .map(|b| b.broker_messages)
-                        .unwrap_or(true),
-                    #[cfg(not(feature = "broker"))]
-                    true,
-                );
-
-                let scheduler_clone = Arc::clone(&scheduler);
-                let event_process = tokio::spawn(async move {
-                    let mut rx = subscriber_rx;
-                    while let Some(event) = rx.recv().await {
-                        scheduler_clone.process_event(&event).await;
-                    }
-                });
-
-                let retry_handle = {
-                    let scheduler = Arc::clone(&scheduler);
-                    tokio::spawn(async move { scheduler.run_retry_loop().await })
-                };
-
-                let worker_handle = tokio::spawn(async move { worker_pool.run().await });
-
-                println!(
-                    "[Background] Background jobs started ({} workers, queue capacity: {})",
-                    config.max_parallel_jobs, config.queue_capacity
-                );
-
-                Some((event_process, retry_handle, worker_handle))
-            } else {
-                None
-            }
+            });
+            Some(handle)
         } else {
             None
         };
@@ -382,12 +238,8 @@ impl FtpServer {
             }
         };
 
-        #[cfg(feature = "background-jobs")]
-        if let Some((event_process, retry_handle, worker_handle)) = background_handle {
-            event_process.abort();
-            retry_handle.abort();
-            worker_handle.abort();
-            println!("[Background] Background jobs stopped");
+        if let Some(handle) = record_handle {
+            handle.abort();
         }
 
         result

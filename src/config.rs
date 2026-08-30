@@ -43,9 +43,9 @@ pub struct Args {
     #[arg(long)]
     pub external_ip: Option<String>,
 
-    /// Path to background jobs config file (plaintext JSON)
+    /// Path to the durable replication store (SQLite); records uploads for the replicator
     #[arg(long)]
-    pub config: Option<String>,
+    pub record_store: Option<String>,
 }
 
 pub fn validate_username(username: &str) -> Result<String, String> {
