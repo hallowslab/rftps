@@ -86,8 +86,10 @@ impl RecordStore {
                  source_path TEXT NOT NULL,
                  dest_path TEXT NOT NULL,
                  dest_key TEXT NOT NULL,
+                 key_finalized INTEGER NOT NULL DEFAULT 0,
                  status TEXT NOT NULL DEFAULT 'pending',
                  attempts INTEGER NOT NULL DEFAULT 0,
+                 next_retry_at INTEGER NOT NULL DEFAULT 0,
                  created_at INTEGER NOT NULL,
                  updated_at INTEGER NOT NULL
              );
