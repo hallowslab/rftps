@@ -52,7 +52,7 @@ rftps --enable-ftps true --cert-pem ./cert.pem --key-pem ./key.pem
 
 rftps can act as a **replication client**: uploaded files are pushed to a
 remote FTP/FTPS server using credentials issued by the ExifFlow Access Broker (a
-zero-trust authorization gateway). No credentials are stored on the client —
+zero-trust authorization gateway). No credentials are stored on the client -
 they are fetched from the broker at runtime and kept in memory.
 
 ### 1. Build with the broker feature
@@ -70,7 +70,7 @@ cargo build --release --features broker
 rftps broker init [--output bg.json] [--force]
 ```
 
-Prompts (all have defaults — just press Enter to accept):
+Prompts (all have defaults - just press Enter to accept):
 
 | Prompt | Default | Notes |
 | ------ | ------- | ----- |
@@ -90,7 +90,7 @@ rftps --config bg.json --directory /path/to/upload-root --username user --passwo
 ```
 
 On the first upload, the device registers with the broker. Approve it in the
-broker dashboard (`http://127.0.0.1:8701/dashboard`) — subsequent uploads
+broker dashboard (`http://127.0.0.1:8701/dashboard`) - subsequent uploads
 replicate automatically.
 
 ### 4. Trusting a self-signed broker or storage cert
@@ -116,7 +116,7 @@ rftps broker keygen    # prints a 64-char hex seed for bg.json broker.device_key
 
 ### Related docs
 
-The broker itself is a separate component — see the
+The broker itself is a separate component - see the
 [`access-broker/README.md`](../access-broker/README.md) for installing and running it.
 
 ## 📋 Command Line Options
