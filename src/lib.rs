@@ -1,14 +1,14 @@
 pub mod config;
 pub use config::{Args, validate_directory, validate_username};
-pub mod utils;
-pub use utils::{generate_random_string, resolve_local_ip, validate_certificates, verify_home};
 pub mod auth;
 pub mod logger;
-pub mod event;
-pub mod record;
 
-pub use event::FtpEvent;
-pub use record::RecordStore;
+// Shared, transport-agnostic plumbing lives in `exifflow-core` and is re-exported
+// here so existing `rftps::event::...`, `rftps::record::...`, and
+// `rftps::utils::...` paths keep working for dependents (app-gui, tests).
+pub use exifflow_core::{event, record, utils};
+pub use exifflow_core::{FtpEvent, RecordStore};
+pub use exifflow_core::{generate_random_string, resolve_local_ip, validate_certificates, verify_home};
 
 use libunftp::ServerBuilder;
 use unftp_core::auth::DefaultUserDetailProvider;
@@ -155,7 +155,24 @@ impl FtpServer {
         )
     }
 
-    pub async fn run(self, mut stop_rx: oneshot::Receiver<()>) -> Result<(), String> {
+    pub async fn run(
+        self,
+        mut stop_rx: oneshot::Receiver<()>,
+        mut ready: Option<oneshot::Sender<Result<(), String>>>,
+    ) -> Result<(), String> {
+        // Preflight the control-port bind so a busy or OS-reserved port is
+        // reported to the caller instead of failing silently inside `listen`.
+        // libunftp binds internally, so this is a bind-and-release; the window
+        // before `listen` takes over is negligible.
+        match std::net::TcpListener::bind(self.addr) {
+            Ok(listener) => drop(listener),
+            Err(e) => {
+                let message = format!("Failed to bind {}: {}", self.addr, bind_hint(e));
+                report_ready(&mut ready, Err(message.clone()));
+                return Err(message);
+            }
+        }
+
         let authenticator = auth::StaticAuthenticator {
             username: self.username,
             password: self.password,
@@ -198,11 +215,17 @@ impl FtpServer {
             }
         }
 
-        let server = server_builder
-            .build()
-            .map_err(|e| format!("Error building FTP server: {}", e))?;
+        let server = match server_builder.build() {
+            Ok(server) => server,
+            Err(e) => {
+                let message = format!("Error building FTP server: {}", e);
+                report_ready(&mut ready, Err(message.clone()));
+                return Err(message);
+            }
+        };
 
         println!("FTP Server listening on {}", self.addr);
+        report_ready(&mut ready, Ok(()));
 
         let addr_str = self.addr.to_string();
 
@@ -244,4 +267,29 @@ impl FtpServer {
 
         result
     }
+}
+
+/// Sends the startup outcome to the caller, if one is waiting.
+fn report_ready(
+    ready: &mut Option<oneshot::Sender<Result<(), String>>>,
+    result: Result<(), String>,
+) {
+    if let Some(tx) = ready.take() {
+        let _ = tx.send(result);
+    }
+}
+
+/// Adds a Windows-specific hint when a bind fails because the port sits inside a
+/// reserved range (WSAEACCES / os error 10013).
+fn bind_hint(err: std::io::Error) -> String {
+    #[cfg(windows)]
+    {
+        if err.raw_os_error() == Some(10013) {
+            return format!(
+                "{} (on Windows, error 10013 usually means the port is in a reserved range; check `netsh interface ipv4 show excludedportrange protocol=tcp`)",
+                err
+            );
+        }
+    }
+    err.to_string()
 }

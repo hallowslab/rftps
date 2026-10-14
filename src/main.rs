@@ -43,7 +43,7 @@ pub async fn main() {
 
     let (_stop_tx, stop_rx) = oneshot::channel();
 
-    if let Err(e) = server.run(stop_rx).await {
+    if let Err(e) = server.run(stop_rx, None).await {
         eprintln!("Error running server: {}", e);
         std::process::exit(1);
     }

@@ -46,14 +46,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Run tests (default features)
+      - name: Run tests
         run: |
           echo "Running tests for ${{ matrix.target }} on ${{ matrix.os }}"
           cargo test
-      - name: Run tests (s3 + broker)
-        run: |
-          echo "Running replication tests for ${{ matrix.target }} on ${{ matrix.os }}"
-          cargo test --features "s3 broker"
 
   build:
     name: Build for ${{ matrix.target }}
@@ -102,13 +98,13 @@ jobs:
       # Certs stay at the crate root: include-pem-files embeds ../cert.pem (relative to src/lib.rs).
 
       - name: Build (plain)
-        run: cargo build --release --target=${{ matrix.target }} --features include-pem-files
+        run: cargo build --release --target=${{ matrix.target }}
 
       - name: Rename plain executable
         run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-plain-${{ matrix.target }}${{ matrix.ext }}
 
-      - name: Build (full)
-        run: cargo build --release --target=${{ matrix.target }} --features "s3 broker include-pem-files"
+      - name: Build (full, embedded certs)
+        run: cargo build --release --target=${{ matrix.target }} --features include-pem-files
 
       - name: Rename full executable
         run: mv target/${{ matrix.target }}/release/rftps${{ matrix.ext }} rftps-full-${{ matrix.target }}${{ matrix.ext }}

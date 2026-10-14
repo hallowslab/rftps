@@ -8,7 +8,7 @@ pub struct Args {
     pub address: String,
 
     /// Port to run the FTP server on
-    #[arg(short = 'p', long, default_value = "21212")]
+    #[arg(short = 'p', long, default_value = "41212")]
     pub port: u16,
 
     /// Directory where uploaded files will be stored

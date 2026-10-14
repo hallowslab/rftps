@@ -50,6 +50,10 @@ rftps --enable-ftps true --cert-pem ./cert.pem --key-pem ./key.pem
 
 ## 🔄 Replication Setup (Broker)
 
+> **Moved:** replication now lives in the standalone `replicator-rs` worker.
+> rftps only records uploads to a durable store (`--record-store`); it has no
+> broker or storage code. The text below is kept for historical reference.
+
 rftps can act as a **replication client**: uploaded files are pushed to a
 remote FTP/FTPS server using credentials issued by the ExifFlow Access Broker (a
 zero-trust authorization gateway). No credentials are stored on the client -
@@ -124,7 +128,7 @@ The broker itself is a separate component - see the
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--address` | `-a` | `0.0.0.0` | Server bind address |
-| `--port` | `-p` | `21212` | FTP server port |
+| `--port` | `-p` | `41212` | FTP server port |
 | `--directory` | `-d` | `./rftps` | Root directory for file storage |
 | `--username` | `-u` | `rftps` | FTP username |
 | `--password` | `-P` | *random* | FTP password (auto-generated if not provided) |
@@ -136,7 +140,7 @@ The broker itself is a separate component - see the
 
 ### Development Server
 ```bash
-rftps --address 127.0.0.1 --port 21212 --directory ./dev-files
+rftps --address 127.0.0.1 --port 41212 --directory ./dev-files
 ```
 
 ### Production Server with FTPS
@@ -195,10 +199,10 @@ The server provides detailed logging for all operations:
 
 ```
 Server Init
-        => Listening on 0.0.0.0:21212
+        => Listening on 0.0.0.0:41212
 Config:
         Host: 192.168.1.100
-        Port: 21212
+        Port: 41212
         Username: rftps
         Password: aB3xK9
 
@@ -221,8 +225,6 @@ User rftps logged out
 
 ### Optional Features
 - `include-pem-files` - Enables TLS certificate loading
-- `background-jobs` - Event bus, job queue, and worker pool (file upload → background jobs)
-- `broker` - Replication client against the ExifFlow Access Broker (includes `background-jobs`)
 
 ## 🤝 Contributing
 
@@ -239,7 +241,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 - [libunftp](https://crates.io/crates/libunftp) - Core FTP server implementation
 - [tokio](https://crates.io/crates/tokio) - Async runtime
 - [clap](https://crates.io/crates/clap) - Command line argument parsing
-- [rand](https://crates.io/crates/rand) - Random password generation
+- [exifflow-core](https://github.com/hallowslab/exifflow-core) - Shared event bus, durable record store, and path utilities
 
 ## 📞 Support
 
